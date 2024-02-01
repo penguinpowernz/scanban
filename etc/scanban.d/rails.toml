@@ -1,0 +1,28 @@
+# this is for a rails app
+
+[[files]]
+path = "/var/log/production.log"
+action = "ipsetblock"
+ip_regex = "for (\\d+.\\d+.\\d+.\\d+) at"
+unban_action = "ipsetunblock"
+rules = [
+  { pattern = "\.php\" for", desc = "php_script"},
+  { pattern = "\.pl\" for", desc = "perl_script"},
+  { pattern = "\.aspx\" for", desc = "aspx_script"},
+  { pattern = "\.cgi\" for", desc = "cgi_script"},
+  { pattern = "XDEBUG_SESSION_START=phpstorm", desc = "php_script"},
+  { pattern = "/cgi-bin/", desc = "cgi_script"},
+  { pattern = "/phpMyAdmin/", desc = "admin_discovery"},
+  { pattern = "/webfig/", desc = "admin_discovery"},
+  { pattern = "/wp-admin/", desc = "wp_discovery"},
+  { pattern = "/wp-includes/", desc = "wp_discovery"},
+  { pattern = "/wordpress", desc = "wp_discovery"},
+  { pattern = "/boaform/", desc = "scanbot"},
+  { pattern = "/kube-system/daemonsets/", desc = "scanbot"},
+  { pattern = "/autodiscover/autodiscover.json?@zdi/Powershell", desc = "scanbot"},
+  { pattern = "/kube-system/daemonsets/", desc = "scanbot"},
+  { pattern = "/api/sonicos/auth", desc = "scanbot"},
+  { pattern = "/dana-na/", desc = "scanbot"},
+  { pattern = "/.git/", desc = "scanbot"},
+  { pattern = "/.env\" for", desc = "scanbot"},
+]
