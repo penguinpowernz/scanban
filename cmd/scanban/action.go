@@ -3,14 +3,21 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type Action struct {
-	Name     string
-	IP       string
-	Line     string
-	Filename string
-	Desc     string
+	Name        string
+	IP          string
+	Line        string
+	Filename    string
+	Bantime     int
+	UnbanAction string
+	Desc        string
+}
+
+func (actn *Action) ReleaseTime() time.Time {
+	return time.Now().Add(time.Duration(actn.Bantime) * time.Hour)
 }
 
 func (actn *Action) CmdString(actions map[string]string) (string, bool) {

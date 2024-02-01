@@ -24,6 +24,17 @@ type Config struct {
 	Whitelist []string          `toml:"whitelist"`
 	Actions   map[string]string `toml:"actions"`
 	Files     []*FileConfig     `toml:"files"`
+	Bantime   int               `toml:"bantime"`
+}
+
+func (c *Config) Compile(cfg *Config) {
+	for _, file := range c.Files {
+		file.Compile(cfg)
+
+		for _, rule := range file.Rules {
+			rule.Compile(file)
+		}
+	}
 }
 
 func (c *Config) Merge(cfg *Config) {
@@ -64,18 +75,29 @@ func (c *Config) IsWhitelisted(ip string) bool {
 }
 
 type FileConfig struct {
-	Path    string        `toml:"path"`
-	IpRegex string        `toml:"ip_regex"`
-	Action  string        `toml:"action"`
-	Rules   []*RuleConfig `toml:"rules"`
+	Path        string        `toml:"path"`
+	IpRegex     string        `toml:"ip_regex"`
+	Action      string        `toml:"action"`
+	UnbanAction string        `toml:"unban_action"`
+	Rules       []*RuleConfig `toml:"rules"`
+	Bantime     int           `toml:"bantime"`
+	Threshold   int           `toml:"threshold,omitempty"`
+}
+
+func (f *FileConfig) Compile(cfg *Config) {
+	if f.Bantime == 0 {
+		f.Bantime = cfg.Bantime
+	}
 }
 
 type RuleConfig struct {
-	IpRegex   string `toml:"ip_regex,omitempty"`
-	Action    string `toml:"action,omitempty"`
-	Pattern   string `toml:"pattern"`
-	Desc      string `toml:"desc"`
-	Threshold int    `toml:"threshold,omitempty"`
+	IpRegex     string `toml:"ip_regex,omitempty"`
+	Action      string `toml:"action,omitempty"`
+	Pattern     string `toml:"pattern"`
+	Desc        string `toml:"desc"`
+	Threshold   int    `toml:"threshold,omitempty"`
+	Bantime     int    `toml:"bantime"`
+	UnbanAction string `toml:"unban_action"`
 
 	ipre  *regexp.Regexp
 	ptnre *regexp.Regexp
@@ -89,6 +111,15 @@ func (r *RuleConfig) Compile(cfg *FileConfig) {
 	}
 	if r.Action == "" {
 		r.Action = cfg.Action
+	}
+	if r.Bantime == 0 {
+		r.Bantime = cfg.Bantime
+	}
+	if r.UnbanAction == "" {
+		r.UnbanAction = cfg.UnbanAction
+	}
+	if r.Threshold == 0 {
+		r.Threshold = cfg.Threshold
 	}
 
 	r.ipre = regexp.MustCompile(r.IpRegex)

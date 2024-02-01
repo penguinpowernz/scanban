@@ -14,6 +14,7 @@ var (
 	dryRun    bool
 	scanAll   bool
 	dropInDir string
+	unbanlist string
 )
 
 func main() {
@@ -21,6 +22,7 @@ func main() {
 	flag.StringVar(&dropInDir, "d", "/etc/scanban.d", "drop-in directory")
 	flag.BoolVar(&dryRun, "n", false, "dry run")
 	flag.BoolVar(&scanAll, "a", false, "scan the entirety of the file, not just new lines")
+	flag.StringVar(&unbanlist, "u", "/var/lib/scanban/unbanlist.toml", "unbanlist file")
 	flag.Parse()
 
 	cfg, err := NewConfig(cfgFile)
@@ -45,6 +47,15 @@ func main() {
 			return nil
 		})
 	}
+
+	// open the unban list
+	list, err := NewUnbanList(unbanlist)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// start the unban loop
+	go unbanLoop(list)
 
 	// make the channel through which any rule violations will be received
 	actionChan := make(chan Action)
@@ -90,7 +101,12 @@ func main() {
 			}
 
 			cmd := exec.Command("/bin/bash", "-c", cmdstring)
-			cmd.Run()
+			if err := cmd.Run(); err != nil {
+				log.Printf("%d: failed to take action %s on %s: %s", seq, actn.Name, actn.IP, err)
+				continue
+			}
+
+			list.AddEntry(actn)
 		}
 	}
 }

@@ -2,6 +2,11 @@ whitelist = [
   "127.0.0.1",
 ]
 
+bantime = 24 # hours
+
 [actions]
-ipsetblock = "ipset add blockedhosts $ip"
-slackalert = "slackalert -a $ip -m $msg"
+ipsetblock = "ipset add blacklist $ip"
+ipsetunblock = "ipset del blacklist $ip"
+blackhole = "ip route add blackhole $ip"
+unblackhole = "ip route delete blackhole $ip"
+slackalert = "slackalert '$desc $ip'"
