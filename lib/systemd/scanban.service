@@ -1,0 +1,10 @@
+[Unit]
+Description=Scan logs and ban abusive IPs
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/scanban
+
+[Install]
+WantedBy=multi-user.target

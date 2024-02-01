@@ -2,6 +2,8 @@
 
 A simple alternative to fail2ban that watches system logs and takes action on IPs.
 
+**This is beta software you should probably validate yourself it before running in production**
+
 ## Usage
 
 The command has the following args:
@@ -18,6 +20,11 @@ Usage of scanban:
 ```
 
 Using `scanban -n -a` is a handy way to see what would happen based on what is in the current files.
+
+When installed from the Debian package it can be manipulated as a systemd service:
+
+    systemctl enable scanban
+    systemctl start scanban
 
 ## Configuration
 
