@@ -1,0 +1,10 @@
+# [[files]]
+# path = "/var/log/kern.log"
+# action = "ipsetblock"
+# ip_regex = "SRC=(\\d+.\\d+.\\d+.\\d+)"
+# rules = [
+#   { pattern = "tripwire .* DPT=23 ", name = "attempt to access telnet" },
+#   { pattern = "tripwire .* DPT=21 " },
+#   { pattern = "tripwire .* DPT=25 " },
+#   { pattern = "tripwire .* DPT=3389 " }
+# ]

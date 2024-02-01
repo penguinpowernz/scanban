@@ -1,0 +1,7 @@
+whitelist = [
+  "127.0.0.1",
+]
+
+[actions]
+ipsetblock = "ipset add blockedhosts $ip"
+slackalert = "slackalert -a $ip -m $msg"
