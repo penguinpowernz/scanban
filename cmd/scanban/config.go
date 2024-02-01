@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -38,18 +37,18 @@ func (c *Config) Merge(cfg *Config) {
 	c.Files = append(c.Files, cfg.Files...)
 }
 
-func (c *Config) MergeFile(filename string) {
+func (c *Config) MergeFile(filename string) error {
 	if !strings.HasSuffix(filename, ".toml") {
-		return
+		return nil
 	}
 
 	c2, err := NewConfig(filename)
 	if err != nil {
-		log.Println("failed to load", filename, err)
-		return
+		return err
 	}
 
 	c.Merge(c2)
+	return nil
 }
 
 func (c *Config) IsWhitelisted(ip string) bool {
@@ -75,7 +74,7 @@ type RuleConfig struct {
 	IpRegex   string `toml:"ip_regex,omitempty"`
 	Action    string `toml:"action,omitempty"`
 	Pattern   string `toml:"pattern"`
-	Name      string `toml:"name"`
+	Desc      string `toml:"desc"`
 	Threshold int    `toml:"threshold,omitempty"`
 
 	ipre  *regexp.Regexp
@@ -98,8 +97,8 @@ func (r *RuleConfig) Compile(cfg *FileConfig) {
 	r.hits = make(map[string]int)
 }
 
-func (r *RuleConfig) Match(ip string) bool {
-	return r.ipre.MatchString(ip)
+func (r *RuleConfig) Match(line string) bool {
+	return r.ptnre.MatchString(line)
 }
 
 func (r *RuleConfig) FindIP(line string) string {
@@ -108,4 +107,16 @@ func (r *RuleConfig) FindIP(line string) string {
 		return matches[1]
 	}
 	return ""
+}
+
+// IPHit will register an IP hit with the rule. The returned boolean is false if action should be taken
+// or true if it should be ignored.
+// If the rule threshold is not set, it is zero meaning action should always be taken.  If the threshold
+// is set to 3, then the 4th hit will signal action should be taken.
+func (r *RuleConfig) IPHit(ip string) (ignore bool) {
+	if r.Threshold == 0 {
+		return false
+	}
+	r.hits[ip]++
+	return r.hits[ip] <= r.Threshold
 }

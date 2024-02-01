@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 )
 
 var (
@@ -18,10 +17,10 @@ var (
 )
 
 func main() {
-	flag.StringVar(&cfgFile, "c", "", "config file")
-	flag.StringVar(&dropInDir, "d", "", "drop-in directory (e.g. /etc/succeed2ban.d)")
+	flag.StringVar(&cfgFile, "c", "/etc/scanban.toml", "config file")
+	flag.StringVar(&dropInDir, "d", "/etc/scanban.d", "drop-in directory")
 	flag.BoolVar(&dryRun, "n", false, "dry run")
-	flag.BoolVar(&scanAll, "a", false, "scan all of the existing files")
+	flag.BoolVar(&scanAll, "a", false, "scan the entirety of the file, not just new lines")
 	flag.Parse()
 
 	cfg, err := NewConfig(cfgFile)
@@ -29,6 +28,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// merge in any config files from the drop-in directory
 	if dropInDir != "" {
 		filepath.WalkDir(dropInDir, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
@@ -37,7 +37,11 @@ func main() {
 			if d.IsDir() {
 				return nil
 			}
-			cfg.MergeFile(path)
+			if err := cfg.MergeFile(path); err != nil {
+				log.Println("failed to merge", path, err)
+				return nil
+			}
+			log.Println("merged", path)
 			return nil
 		})
 	}
@@ -59,42 +63,34 @@ func main() {
 		select {
 		case <-ctx.Done():
 			return
-		case action := <-actionChan:
+		case actn := <-actionChan:
 			seq++
 
-			if cfg.IsWhitelisted(action.IP) {
-				log.Printf("%d SKIP whitelisted ip: %s", seq, action.IP)
-				continue
-			}
+			log.Printf("%d: %s line matches rule for IP %s", seq, actn.Filename, actn.IP)
+			log.Printf("%d: %s", seq, actn.Line)
 
-			cmdtmpl, found := cfg.Actions[action.Name]
+			cmdstring, found := actn.CmdString(cfg.Actions)
 			if !found {
-				log.Printf("%d SKIP unknown action: %s", seq, action.Name)
+				log.Printf("%d SKIP unknown action: %s", seq, actn.Name)
 				continue
 			}
 
-			cmdstring := strings.ReplaceAll(cmdtmpl, "$ip", action.IP)
-			cmdstring = strings.ReplaceAll(cmdstring, "$msg", action.Line)
+			if err := actn.Valid(cfg); err != nil {
+				log.Printf("%d SKIP %s", seq, err)
+				continue
+			}
+
+			log.Printf("%d: taking action %s: %s", seq, actn.Name, cmdstring)
 
 			if dryRun {
-				log.Printf("%d DRY RUN command for match in %s", seq, action.Filename)
-				log.Printf("%d DRY RUN trigger: %s", seq, action.Line)
-				log.Printf("%d DRY RUN: %s", seq, cmdstring)
+				log.Printf("%d: SKIP dry run", seq)
 				continue
 			}
 
-			bits := strings.Split(cmdstring, " ")
-			cmd := exec.Command(bits[0], bits[1:]...)
+			cmd := exec.Command("/bin/bash", "-c", cmdstring)
 			cmd.Run()
 		}
 	}
-}
-
-type Action struct {
-	Name     string
-	IP       string
-	Line     string
-	Filename string
 }
 
 func scanFile(ctx context.Context, actionChan chan Action, fcfg *FileConfig) {
@@ -107,39 +103,14 @@ func scanFile(ctx context.Context, actionChan chan Action, fcfg *FileConfig) {
 
 	go t.Tail(ctx, lines)
 
+	checkLine := makeLineChecker(actionChan, fcfg.Path, fcfg.Rules)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case line := <-lines:
-			checkLine(actionChan, line, fcfg.Rules)
-		}
-	}
-}
-
-func checkLine(actionChan chan Action, line string, rules []*RuleConfig) {
-	for _, rule := range rules {
-		if !rule.Match(line) {
-			continue
-		}
-
-		var ip string
-		if ip = rule.FindIP(line); ip == "" {
-			log.Printf("WARN: line matched but failed to detect IP: %s", line)
-			continue
-		}
-
-		if rule.Threshold > 0 {
-			rule.hits[ip]++
-			if rule.hits[ip] < rule.Threshold {
-				continue
-			}
-		}
-
-		actionChan <- Action{
-			Name: rule.Action,
-			IP:   ip,
-			Line: line,
+			checkLine(line)
 		}
 	}
 }

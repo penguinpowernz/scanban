@@ -28,13 +28,16 @@ func TestLineMatch(t *testing.T) {
 	_, err := toml.Decode(cfgData, cfg)
 	assert.Nil(t, err)
 
-	line := `Oct 3 17:36:35 xena kernel: [17213514.504000]tripwire IN=eth1 OUT= MAC=00:03:6d:00:83:cf:00 SRC=2.3.4.5 DST=192.168.1.10 LEN=60 TOS=0x00PREC=0x00 TTL=128 ID=4628 PROTO=TCP DPT=23 CODE=0 ID=512 SEQ=1280`
+	badline := `Oct 3 17:36:35 xena kernel: [17213514.504000]tripwire IN=eth1 OUT= MAC=00:03:6d:00:83:cf:00 SRC=2.3.4.5 DST=192.168.1.10 LEN=60 TOS=0x00PREC=0x00 TTL=128 ID=4628 PROTO=TCP DPT=23 CODE=0 ID=512 SEQ=1280`
 
 	r := cfg.Files[2].Rules[0]
 	r.Compile(cfg.Files[2])
 
-	assert.True(t, r.Match(line))
-	assert.Equal(t, r.FindIP(line), "2.3.4.5")
+	assert.True(t, r.Match(badline))
+	assert.Equal(t, r.FindIP(badline), "2.3.4.5")
+
+	goodline := "Feb  1 17:18:19 pop-os kernel: [3950260.538941] usb 1-2.1: Warning! Unlikely big volume range (=7248), cval->res is probably wrong."
+	assert.False(t, r.Match(goodline))
 }
 
 func TestDropIn(t *testing.T) {
@@ -50,7 +53,32 @@ func TestDropIn(t *testing.T) {
 
 	cfg.Merge(cfg2)
 	assert.Len(t, cfg.Files, 4)
+}
 
+func TestWhitelist(t *testing.T) {
+	cfg := &Config{Whitelist: []string{"127.0.0.1", "192.168.1.0/24"}}
+	assert.True(t, cfg.IsWhitelisted("127.0.0.1"))
+	assert.False(t, cfg.IsWhitelisted("89.207.132.170"))
+	assert.True(t, cfg.IsWhitelisted("192.168.1.202"))
+}
+
+func TestIPHit(t *testing.T) {
+	rule := &RuleConfig{
+		Threshold: 3,
+		hits:      make(map[string]int),
+	}
+
+	ignore := rule.IPHit("127.0.0.1")
+	assert.True(t, ignore)
+	ignore = rule.IPHit("127.0.0.1")
+	assert.True(t, ignore)
+	ignore = rule.IPHit("127.0.0.1")
+	assert.True(t, ignore)
+	ignore = rule.IPHit("127.0.0.1")
+	assert.False(t, ignore)
+
+	rule = &RuleConfig{Threshold: 0}
+	assert.False(t, rule.IPHit("127.0.0.1"))
 }
 
 var cfgData = `
