@@ -46,10 +46,12 @@ func main() {
 		})
 	}
 
+	// make the channel through which any rule violations will be received
 	actionChan := make(chan Action)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// compile all the rules and start scanning the files
 	for _, fcfg := range cfg.Files {
 		for _, rule := range fcfg.Rules {
 			rule.Compile(fcfg)

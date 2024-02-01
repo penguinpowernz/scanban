@@ -35,14 +35,15 @@ whitelist = [
 ]
 ```
 
-The actions to take on an abusive IP.  The variables $ip and $desc will be replaced with the offending IP and the rule description.
+The actions to take on an abusive IP.  The variables $ip and $desc will be replaced with the offending IP and the rule description. Note
+that these actions will be passed through bash like `bash -c "iptables -A INPUT -s 182.23.31.12 -j DROP"`.
 ```toml
 [actions]
 blockit = "iptables -A INPUT -s $ip -j DROP"
-notify = "pingslack '$desc' $ip"
+notify = "pingslack '$desc from $ip'"
 ```
 
-A file to scan including the action to take, and the regex to find the IP by:
+A file to scan including the action to take, and the regex to find the IP by.  This can be repeated for as many files as you need to scan.
 ```toml
 [[files]]
 path = "/var/log/nginx/access.log"
