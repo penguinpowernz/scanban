@@ -54,10 +54,10 @@ A file to scan including the action to take, and the regex to find the IP by.  T
 ```toml
 [[files]]
 path = "/var/log/nginx/access.log"
-action = "blockit"                  # this is used for all rules, unless overriden
-ip_regex = " (\d+.\d+.\d+.\d+) "    # this is used for all rules, unless overriden
+action = "blockit"                      # this is used for all rules, unless overriden
+ip_regex = " (\\d+.\\d+.\\d+.\\d+) "    # this is used for all rules, unless overriden
 rules = [
-  { pattern = "phpMyAdmin", desc = "attempt to access invalid URL" }
+  { pattern = "phpMyAdmin", desc = "attempt to access invalid URL" },
   { pattern = "wp-admin", desc = "attempt to access invalid URL", action = "notify" }
 ]
 ```
@@ -65,11 +65,11 @@ rules = [
 The rules consist of the following fields:
 
 ```toml
-{
-  pattern   = "40[4,0,3,1]",     # the pattern to scan for, can be a regex
-  threshold = 10                 # how many times the pattern should be seen before taking action
-  desc      = "sus 400 errors"   # a description of the rule
-  ip_regex  = "(\d+)"            # override the regex that finds the IP address
-  action    = "notify"           # override the action that should be called for this rule
-}
+rules = [{
+  pattern   = "40[4,0,3,1]",          # the pattern to scan for, can be a regex
+  threshold = 10                      # how many times the pattern should be seen before taking action
+  desc      = "sus 400 errors"        # a description of the rule
+  ip_regex  = "(\\d+.\\d+.\\d+.\\d+)" # override the regex that finds the IP address
+  action    = "notify"                # override the action that should be called for this rule
+}]
 ```
