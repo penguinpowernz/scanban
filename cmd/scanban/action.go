@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -14,6 +15,17 @@ type Action struct {
 	Bantime     int
 	UnbanAction string
 	Desc        string
+}
+
+func (actn *Action) Cmd(str string) *exec.Cmd {
+	cmd := exec.Command("/bin/bash", "-c", str)
+	cmd.Env = append(cmd.Env, "SB_IP="+actn.IP)
+	cmd.Env = append(cmd.Env, "SB_DESC="+actn.Desc)
+	cmd.Env = append(cmd.Env, "SB_BANTIME="+fmt.Sprintf("%d", actn.Bantime))
+	cmd.Env = append(cmd.Env, "SB_FILENAME="+actn.Filename)
+	cmd.Env = append(cmd.Env, "SB_LINE="+actn.Line)
+	cmd.Env = append(cmd.Env, "SB_NAME="+actn.Name)
+	return cmd
 }
 
 func (actn *Action) ReleaseTime() time.Time {

@@ -100,7 +100,7 @@ func main() {
 				continue
 			}
 
-			cmd := exec.Command("/bin/bash", "-c", cmdstring)
+			cmd := actn.Cmd(cmdstring)
 			if err := cmd.Run(); err != nil {
 				log.Printf("%d: failed to take action %s on %s: %s", seq, actn.Name, actn.IP, err)
 				continue
