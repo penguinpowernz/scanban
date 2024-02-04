@@ -76,6 +76,7 @@ func (c *Config) IsWhitelisted(ip string) bool {
 
 type FileConfig struct {
 	Path        string        `toml:"path"`
+	Docker      string        `toml:"docker"`
 	IpRegex     string        `toml:"ip_regex"`
 	Action      string        `toml:"action"`
 	UnbanAction string        `toml:"unban_action"`

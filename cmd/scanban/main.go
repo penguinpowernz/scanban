@@ -5,7 +5,6 @@ import (
 	"flag"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 )
 
@@ -111,11 +110,31 @@ func main() {
 	}
 }
 
+type tailer interface {
+	Tail(ctx context.Context, lines chan string)
+}
+
 func scanFile(ctx context.Context, actionChan chan Action, fcfg *FileConfig) {
 	lines := make(chan string)
-	t, err := NewTailer(fcfg.Path, !scanAll)
-	if err != nil {
-		log.Printf("failed to open %s: %s", fcfg.Path, err)
+
+	var t tailer
+	var err error
+
+	switch {
+	case fcfg.Path != "":
+		t, err = NewTailer(fcfg.Path, !scanAll)
+		if err != nil {
+			log.Printf("failed to open %s: %s", fcfg.Path, err)
+			return
+		}
+	case fcfg.Docker != "":
+		t, err = NewDockerTailer(fcfg.Docker, !scanAll)
+		if err != nil {
+			log.Printf("failed to open %s: %s", fcfg.Docker, err)
+			return
+		}
+	default:
+		log.Printf("failed to open tail: no path or docker specified in config")
 		return
 	}
 
