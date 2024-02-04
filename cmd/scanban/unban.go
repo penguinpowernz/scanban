@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -18,19 +19,30 @@ func NewUnbanList(fn string) (*UnbanList, error) {
 		return nil, err
 	}
 
-	list := &UnbanList{fn: fn, mu: sync.RWMutex{}}
+	list := &UnbanList{fn: fn, mu: new(sync.RWMutex)}
 	if len(data) > 0 {
 		if _, err := toml.Decode(string(data), list); err != nil {
 			return nil, err
 		}
 	}
 
+	list.execute = func(entry UnbanEntry) bool {
+		cmd := entry.Cmd()
+		if err := cmd.Run(); err != nil {
+			log.Printf("failed to unban %s: %s", entry.IP, err)
+			return false
+		}
+		return true
+	}
+
 	return list, nil
 }
 
 type UnbanList struct {
-	mu      sync.RWMutex
+	mu      *sync.RWMutex
 	fn      string
+	execute func(entry UnbanEntry) bool
+
 	Entries []UnbanEntry `json:"entries"`
 }
 
@@ -42,7 +54,11 @@ type UnbanEntry struct {
 
 func (entry *UnbanEntry) Cmd() *exec.Cmd {
 	cmdstring := strings.ReplaceAll(entry.Action, "$ip", entry.IP)
-	return exec.Command("/bin/bash", "-c", cmdstring)
+	cmd := exec.Command("/bin/bash", "-c", cmdstring)
+	cmd.Env = append(cmd.Env, "SB_IP="+entry.IP)
+	cmd.Env = append(cmd.Env, "SB_UNBANTIME="+fmt.Sprintf("%d", entry.After.Unix()))
+	cmd.Env = append(cmd.Env, "SB_NAME="+entry.Action)
+	return cmd
 }
 
 func (list *UnbanList) Unban() {
@@ -53,13 +69,9 @@ func (list *UnbanList) Unban() {
 		entry := list.Entries[i]
 		if time.Now().After(entry.After) {
 			log.Printf("Unbanning %s", entry.IP)
-			cmd := entry.Cmd()
-			if err := cmd.Run(); err != nil {
-				log.Printf("failed to unban %s: %s", entry.IP, err)
-				continue
+			if list.execute(entry) {
+				list.Entries = append(list.Entries[:i], list.Entries[i+1:]...)
 			}
-
-			list.Entries = append(list.Entries[:i], list.Entries[i+1:]...)
 		}
 	}
 }
