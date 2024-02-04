@@ -25,6 +25,7 @@ func (actn *Action) Cmd(str string) *exec.Cmd {
 	cmd.Env = append(cmd.Env, "SB_FILENAME="+actn.Filename)
 	cmd.Env = append(cmd.Env, "SB_LINE="+actn.Line)
 	cmd.Env = append(cmd.Env, "SB_NAME="+actn.Name)
+	cmd.Env = append(cmd.Env, "SB_UNBANACTION="+actn.UnbanAction)
 	return cmd
 }
 
