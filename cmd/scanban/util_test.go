@@ -117,3 +117,47 @@ func TestLineCheckerThreshold(t *testing.T) {
 	assert.Equal(t, "production.log", actn.Filename)
 	assert.Equal(t, badline, actn.Line)
 }
+
+func TestLineCheckerWithMultipleActions(t *testing.T) {
+	ach := make(chan Action)
+	rule := &RuleConfig{
+		Desc:      "WP_discovery",
+		Action:    "ipsetblock,notify",
+		IpRegex:   "for (\\d+.\\d+.\\d+.\\d+) at",
+		Pattern:   ".*wp-includes.*",
+		Threshold: 0,
+	}
+	rule.Compile(&FileConfig{})
+	c := makeLineChecker(ach, "production.log", []*RuleConfig{rule})
+
+	// the first hit is ignored
+	badline := `I, [2024-01-31T23:59:55.243160 #145]  INFO -- : [31452379-71f8-4b36-b04b-b27893a6d30b] Started GET "/sign_in/wp/wp-includes/wlwmanifest.xml" for 202.142.126.30 at 2024-01-31 23:59:55 +0000`
+	go c(badline)
+
+	var a []Action
+	var actn Action
+	func() {
+		for {
+			select {
+			case actn = <-ach:
+				a = append(a, actn)
+			case <-time.After(time.Second / 10):
+				return
+			}
+		}
+	}()
+
+	assert.Len(t, a, 2)
+
+	assert.Equal(t, "ipsetblock", a[0].Name)
+	assert.Equal(t, "202.142.126.30", a[0].IP)
+	assert.Equal(t, "WP_discovery", a[0].Desc)
+	assert.Equal(t, "production.log", a[0].Filename)
+	assert.Equal(t, badline, a[0].Line)
+
+	assert.Equal(t, "notify", a[1].Name)
+	assert.Equal(t, "202.142.126.30", a[1].IP)
+	assert.Equal(t, "WP_discovery", a[1].Desc)
+	assert.Equal(t, "production.log", a[1].Filename)
+	assert.Equal(t, badline, a[1].Line)
+}

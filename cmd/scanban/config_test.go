@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"sync"
 	"testing"
 
 	"github.com/BurntSushi/toml"
@@ -66,6 +67,7 @@ func TestIPHit(t *testing.T) {
 	rule := &RuleConfig{
 		Threshold: 3,
 		hits:      make(map[string]int),
+		mu:        &sync.RWMutex{},
 	}
 
 	ignore := rule.IPHit("127.0.0.1")

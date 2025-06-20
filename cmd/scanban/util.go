@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net"
+	"strings"
 )
 
 func ipInCIDR(cidr, ip string) bool {
@@ -37,12 +38,15 @@ func makeLineChecker(actionChan chan Action, filename string, rules []*RuleConfi
 				continue
 			}
 
-			actionChan <- Action{
-				Name:     rule.Action,
-				IP:       ip,
-				Line:     line,
-				Filename: filename,
-				Desc:     rule.Desc,
+			for _, action := range strings.Split(rule.Action, ",") {
+				log.Printf("INFO: dispatching %s for %s in %s", action, ip, filename)
+				actionChan <- Action{
+					Name:     action,
+					IP:       ip,
+					Line:     line,
+					Filename: filename,
+					Desc:     rule.Desc,
+				}
 			}
 		}
 	}

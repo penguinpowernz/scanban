@@ -4,6 +4,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 )
@@ -104,6 +105,7 @@ type RuleConfig struct {
 	ptnre *regexp.Regexp
 
 	hits map[string]int
+	mu   *sync.RWMutex
 }
 
 func (r *RuleConfig) Compile(cfg *FileConfig) {
@@ -127,6 +129,7 @@ func (r *RuleConfig) Compile(cfg *FileConfig) {
 	r.ptnre = regexp.MustCompile(r.Pattern)
 
 	r.hits = make(map[string]int)
+	r.mu = &sync.RWMutex{}
 }
 
 func (r *RuleConfig) Match(line string) bool {
@@ -149,6 +152,10 @@ func (r *RuleConfig) IPHit(ip string) (ignore bool) {
 	if r.Threshold == 0 {
 		return false
 	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.hits[ip]++
 	return r.hits[ip] <= r.Threshold
 }

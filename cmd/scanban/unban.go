@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log"
@@ -105,10 +106,17 @@ func (list *UnbanList) Save() error {
 	return f.Chmod(fs.FileMode(0o600))
 }
 
-func unbanLoop(list *UnbanList) {
+func unbanLoop(ctx context.Context, list *UnbanList) {
+	list.Unban()
+	list.Save()
+
 	for {
-		list.Unban()
-		list.Save()
-		time.Sleep(time.Hour)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Hour):
+			list.Unban()
+			list.Save()
+		}
 	}
 }

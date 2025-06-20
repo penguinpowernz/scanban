@@ -5,7 +5,9 @@ import (
 	"flag"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 )
 
 var (
@@ -23,6 +25,9 @@ func main() {
 	flag.BoolVar(&scanAll, "a", false, "scan the entirety of the file, not just new lines")
 	flag.StringVar(&unbanlist, "u", "/var/lib/scanban/unbanlist.toml", "unbanlist file")
 	flag.Parse()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	cfg, err := NewConfig(cfgFile)
 	if err != nil {
@@ -54,12 +59,10 @@ func main() {
 	}
 
 	// start the unban loop
-	go unbanLoop(list)
+	go unbanLoop(ctx, list)
 
 	// make the channel through which any rule violations will be received
 	actionChan := make(chan Action)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// compile all the rules and start scanning the files
 	for _, fcfg := range cfg.Files {
