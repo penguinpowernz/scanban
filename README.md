@@ -1,8 +1,13 @@
 # scanban
 
-A simple alternative to fail2ban that watches system logs and takes action on IPs.
+A simple alternative to fail2ban.
 
-**This is beta software you should probably validate yourself it before running in production**
+System logs are scanned for certain patterns that indicate a malicious host is trying to scan the machine
+for exploits.  If the IP of the malicious host can be found on the log line, we can use that to ban the
+offender.
+
+This allows us to ban bots that try to brute force SSH endpoints to search for vulnerable phpMyAdmin or
+wordpress instances, and the like.
 
 ## Usage
 
@@ -16,10 +21,16 @@ Usage of scanban:
         config file (default "/etc/scanban.toml")
   -d string
         drop-in directory (default "/etc/scanban.d")
+  -f string
+        entire file to scan
   -n    dry run
+  -u string
+        unbanlist file (default "/var/lib/scanban/unbanlist.toml")
+  -v    verbose
 ```
 
-Using `scanban -n -a` is a handy way to see what would happen based on what is in the current files.
+Using `scanban -n -a` is a handy way to see what would happen based on what is in the current files, or feed
+it directly using `scanban -n -f /var/log/auth.log` or `cat /var/log/auth.log | scanban -n -f -`.
 
 When installed from the Debian package it can be manipulated as a systemd service:
 
@@ -30,31 +41,51 @@ When installed from the Debian package it can be manipulated as a systemd servic
 
 The configuration file can be found at `/etc/scanban.toml` and extra configs can be dropped
 into `/etc/scanban.d` to keep things tidy (must have the extension `.toml`). As these config
-files define commands to run, it is important to keep strict permissons, 0600 recommended.
+files define commands to run, **it is important to keep strict permissons, 0600 recommended**.
 
-The config file is broken up like so:
+Unfortunately the TOML format requires double escapes in the regular expression definitions.
 
-A whitelist, these IPs will never be banned as well as how long IPs should be banned for:
+### Global
+
+A number of variables can be defined at the top level of the config file so that you don't need to
+set them for every single rule.  Each rule can override these in it's own definition.
+
+```toml
+bantime = 1
+threshold = 3
+ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"
+action = "blockit"
+unban_action = "unblockit"
+```
+
+### Files
+
+This is a list of files to scan and feed to the rules engine.
+
+```toml
+files = [
+  "/var/log/auth.log",
+  "/var/log/ufw.log",
+]
+```
+
+The lines will be delivered to all rules to attempt matching and then banning.
+
+### Whitelist
+
+This allows you to ensure certain IPs or networks are never banned.
+
 ```toml
 whitelist = [
   "127.0.0.1",
   "192.168.1.0/24"
 ]
-
-bantime = 24 # in hours, can be overwritten for files and rules
 ```
 
-The actions to take on an abusive IP.  The variables $ip and $desc will be replaced with the offending IP and the rule description. Note
-that these actions will be passed through bash like `bash -c "iptables -A INPUT -s 182.23.31.12 -j DROP"`. When this command is run it also has access to the following envvars:
+### Actions
 
-- SB_IP
-- SB_DESC
-- SB_BANTIME
-- SB_FILENAME
-- SB_LINE
-- SB_NAME
-- SB_UNBANACTION
-
+Actions define a shorthand reference name to use for system commands that will run to ban or unban an IP.  It can 
+be an something like an iptables command or a path your own script.
 
 ```toml
 [actions]
@@ -63,30 +94,53 @@ notify = "pingslack"
 unblockit = "iptables -D INPUT -s $ip -j DROP"
 ```
 
-A file to scan including the action to take, and the regex to find the IP by.  This can be repeated for as many files as you need to scan.
+The variables in the command like `$ip` will be replaced with the offending IP. The commands will be passed through
+bash like `bash -c "iptables -A INPUT -s 182.23.31.12 -j DROP"`. 
+
+Every command is given environment variables when it is run, so for instance the action `pingslack` has access to
+the following envvars:
+
+| Envvar | Description |
+| --- | --- |
+| SB_IP | The actual offending IP |
+| SB_BANTIME | The length of time to ban for (in hours) |
+| SB_FILENAME | The file that the IP was seen in |
+| SB_LINE | The full line that triggered the ban |
+| SB_NAME | The name of the action (e.g. `notify`) |
+| SB_UNBANACTION | The name of the action to take to unban |
+
+### Rules
+
+The rules are setup with the array style toml section that uses the double brackets and is based around a pattern or
+set of patterns.  These patterns are used to match against the scanned logged lines.  Any that don't match will be
+ignored while ones that match will be further processed.
+
 ```toml
-[[files]]
-path = "/var/log/nginx/access.log"
-action = "blockit"                      # this is used for all rules, unless overriden
-ip_regex = " (\\d+.\\d+.\\d+.\\d+) "    # this is used for all rules, unless overriden
-unban_action = "unblockit"              # this is used for all rules, unless overriden
-bantime = 1                             # this overrides the 24 hours specified in the config
-rules = [
-  { pattern = "phpMyAdmin", desc = "attempt to access invalid URL" },
-  { pattern = "wp-admin", desc = "attempt to access invalid URL", action = "notify", unban_action = "" }
+[[rules]]
+pattern = "Authentication failed"
+```
+
+You can also use a list of patterns to match against.  So this rule can catch any brute force attempts in auth.log:
+
+```toml
+[[rules]]
+patterns = [
+  "sshd.*Invalid user \\w+ from",
+  "sshd.*User \\w+ from .* not allowed because not listed in AllowUsers",
+  "sshd.*Did not receive identification string from"
 ]
 ```
 
-The rules consist of the following fields:
+The top level IP regex pattern is mostly suffice, but if there are more than one IP in the line you can specify a
+regex just for the rule. This rule can detect machines scanning port 138 (eg. potential EternalBlue worm) and block
+them completely on all ports:
 
 ```toml
-rules = [{
-  pattern      = "40[4,0,3,1]",          # the pattern to scan for, can be a regex
-  threshold    = 10                      # how many times the pattern should be seen before taking action
-  desc         = "sus 400 errors"        # a description of the rule
-  ip_regex     = "(\\d+.\\d+.\\d+.\\d+)" # override the regex that finds the IP address
-  action       = "notify"                # override the action that should be called for this rule
-  unban_action = "unblockit"             # override the unban action that should be called for this rule
-  bantime      = 1                       # override the bantime that should be used for this rule
-}]
+[[rules]]
+pattern = "IN=\\w+ .*DPT=138"
+ip_regex = " SRC=(\\d+\\.\\d+\\.\\d+\\.\\d+) "
 ```
+
+# TODO
+
+- [ ] more tests
