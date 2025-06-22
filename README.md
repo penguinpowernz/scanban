@@ -147,6 +147,32 @@ pattern = "IN=\\w+ .*DPT=138"
 ip_regex = " SRC=(\\d+\\.\\d+\\.\\d+\\.\\d+) "
 ```
 
+## Output
+
+The output actions are shown in the logs:
+
+```
+2025/06/22 21:45:54 loading config
+2025/06/22 21:45:54 opening unban list
+2025/06/22 21:45:54 selecting scanner strategy
+2025/06/22 21:45:54 buliding line handlers
+2025/06/22 21:45:54 built 1 rules
+2025/06/22 21:45:54 built 5 actions
+2025/06/22 21:45:54 starting scanner loop
+2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=216.144.248.30       action=ipsetblock           release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=80.94.95.15          action=ipsetblock           release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=115.247.46.121       action=ipsetblock           release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=216.144.248.25       action=ipsetblock           release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=69.162.124.227       action=ipsetblock           release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=37.198.207.35        action=ipsetblock           release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=69.162.124.235       action=ipsetblock           release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=216.144.248.28       action=ipsetblock           release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=80.94.95.15          action=ipsetblock           release=2025-06-23T21:45
+2025/06/22 21:45:54 10 lines scanned in 0.00 seconds
+2025/06/22 21:45:54 9 actioned, 1 rejected
+2025/06/22 21:45:54 shutting down
+```
+
 # TODO
 
 - [ ] more tests
