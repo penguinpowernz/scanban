@@ -1,10 +1,11 @@
-package main
+package scan
 
 import (
 	"bufio"
 	"context"
 	"io"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,7 @@ type DockerTailer struct {
 }
 
 func NewDockerTailer(name string, newLinesOnly bool) (*DockerTailer, error) {
+	name = strings.TrimPrefix(name, "docker://")
 	t := &DockerTailer{
 		name: name,
 	}

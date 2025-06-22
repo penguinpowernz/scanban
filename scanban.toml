@@ -1,0 +1,46 @@
+
+files = [
+  "/var/log/syslog",
+  "/var/log/auth.log",
+  "/var/log/ufw.log",
+  "docker://influxdb"
+]
+
+ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"
+bantime = 24
+action = "ipsetblock"
+unban_action = "ipsetunblock"
+
+whitelist = [
+  "127.0.0.1",
+]
+
+[actions]
+blockit = "tiptables -A INPUT -s $ip -j DROP && iptables -A OUTPUT -d $ip -j DROP"
+unblockit = "tiptables -D INPUT -s $ip -j DROP && iptables -D OUTPUT -d $ip -j DROP"
+notify = "pingslack"
+ipsetblock = "tipset add scanban $ip"
+ipsetunblock = "tipset del scanban $ip"
+
+#[[rules]]
+#pattern = "IN=\\w+ .*DPT=143"
+#ip_regex = " SRC=(\\d+\\.\\d+\\.\\d+\\.\\d+) "
+
+#[[rules]]
+#patterns = [
+  #"wp-admin",
+  #"phpMyAdmin"
+#]
+
+
+# Jun 15 06:29:57 tunnel sshd[12431]: Invalid user camille from 80.94.95.15
+# Jun 21 12:54:36 tunnel sshd[27262]: User root from 195.178.110.160 not allowed because not listed in AllowUsers
+# Jun 21 12:53:34 tunnel sshd[27153]: Did not receive identification string from 69.162.124.238
+[[rules]]
+patterns = [
+  "sshd.*Invalid user \\w+ from",
+  "sshd.*User \\w+ from .* not allowed because not listed in AllowUsers",
+  "sshd.*Did not receive identification string from"
+]
+ip_regex = "from (\\d+.\\d+.\\d+.\\d+)"
+threshold = 3

@@ -1,4 +1,4 @@
-package main
+package scan
 
 import (
 	"bufio"
@@ -6,9 +6,41 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"syscall"
 	"time"
 )
+
+var scanAll bool
+
+type tailer interface {
+	Tail(ctx context.Context, lines chan string)
+}
+
+func NewTailerFromFileConfig(path string) (tailer, error) {
+	var t tailer
+	var err error
+
+	switch {
+	case strings.HasPrefix(path, "docker://"):
+		t, err = NewDockerTailer(path, !scanAll)
+		if err != nil {
+			log.Printf("failed to open %s: %s", path, err)
+			return nil, err
+		}
+	case path != "":
+		t, err = NewTailer(path, !scanAll)
+		if err != nil {
+			log.Printf("failed to open %s: %s", path, err)
+			return nil, err
+		}
+	default:
+		log.Printf("failed to open tail: no path or docker specified in config")
+		return nil, err
+	}
+
+	return t, nil
+}
 
 // Tailer tails a file, it will also check if the file inode has changed which
 // indicates the underlying file was deleted or rotated without using copytrunc
