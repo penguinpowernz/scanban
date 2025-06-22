@@ -45,6 +45,9 @@ files define commands to run, **it is important to keep strict permissons, 0600 
 
 Unfortunately the TOML format requires double escapes in the regular expression definitions.
 
+**Unbanning** is required so that you don't fill up memory and IP tables with banned IPs which can
+hamper performance - also the bot machines don't use the same host for long.
+
 ### Global
 
 A number of variables can be defined at the top level of the config file so that you don't need to
@@ -57,6 +60,9 @@ ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"
 action = "blockit"
 unban_action = "unblockit"
 ```
+
+We can see the default actions to take.  We can also see the default threshold for how many times
+an IP should be seen offending before being banned.  The default bantime is set to 1 hour.
 
 ### Files
 
