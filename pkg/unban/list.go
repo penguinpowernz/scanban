@@ -1,7 +1,6 @@
-package main
+package unban
 
 import (
-	"context"
 	"fmt"
 	"io/fs"
 	"log"
@@ -12,15 +11,16 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
-func NewUnbanList(fn string) (*UnbanList, error) {
+func NewList(fn string) (*List, error) {
 	data, err := os.ReadFile(fn)
 	if err != nil {
 		return nil, err
 	}
 
-	list := &UnbanList{fn: fn, mu: new(sync.RWMutex)}
+	list := &List{fn: fn, mu: new(sync.RWMutex)}
 	if len(data) > 0 {
 		if _, err := toml.Decode(string(data), list); err != nil {
 			return nil, err
@@ -39,7 +39,7 @@ func NewUnbanList(fn string) (*UnbanList, error) {
 	return list, nil
 }
 
-type UnbanList struct {
+type List struct {
 	mu      *sync.RWMutex
 	fn      string
 	execute func(entry UnbanEntry) bool
@@ -62,14 +62,14 @@ func (entry *UnbanEntry) Cmd() *exec.Cmd {
 	return cmd
 }
 
-func (list *UnbanList) Unban() {
+func (list *List) unban() {
 	list.mu.Lock()
 	defer list.mu.Unlock()
 
 	for i := len(list.Entries) - 1; i >= 0; i-- {
 		entry := list.Entries[i]
 		if time.Now().After(entry.After) {
-			log.Printf("Unbanning %s", entry.IP)
+			log.Printf("Unbanning %s with action %s", entry.IP, entry.Action)
 			if list.execute(entry) {
 				list.Entries = append(list.Entries[:i], list.Entries[i+1:]...)
 			}
@@ -77,18 +77,35 @@ func (list *UnbanList) Unban() {
 	}
 }
 
-func (list *UnbanList) AddEntry(actn Action) {
-	list.mu.Lock()
-	defer list.mu.Unlock()
+func (list *List) Handle(c *scan.Context) {
+	if !c.OK() {
+		return
+	}
 
-	list.Entries = append(list.Entries, UnbanEntry{
-		Action: actn.UnbanAction,
-		IP:     actn.IP,
-		After:  actn.ReleaseTime(),
-	})
+	if c.UnbanAction == "" {
+		return
+	}
+
+	if !c.DryRun {
+		list.mu.Lock()
+		defer list.mu.Unlock()
+
+		list.Entries = append(list.Entries, UnbanEntry{
+			Action: c.UnbanAction,
+			IP:     c.IP,
+			After:  c.ReleaseTime(),
+		})
+
+		if err := list.save(); err != nil {
+			log.Printf("failed to save unban list: %s", err)
+		}
+	}
+
+	c.UnbanScheduled = true
+	c.UnbanAt = c.ReleaseTime()
 }
 
-func (list *UnbanList) Save() error {
+func (list *List) save() error {
 	list.mu.Lock()
 	defer list.mu.Unlock()
 
@@ -104,19 +121,4 @@ func (list *UnbanList) Save() error {
 
 	// protect it from external modification
 	return f.Chmod(fs.FileMode(0o600))
-}
-
-func unbanLoop(ctx context.Context, list *UnbanList) {
-	list.Unban()
-	list.Save()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(time.Hour):
-			list.Unban()
-			list.Save()
-		}
-	}
 }

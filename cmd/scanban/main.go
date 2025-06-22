@@ -6,8 +6,18 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
+
+	"github.com/penguinpowernz/scanban/pkg/actions"
+	"github.com/penguinpowernz/scanban/pkg/config"
+	"github.com/penguinpowernz/scanban/pkg/logit"
+	"github.com/penguinpowernz/scanban/pkg/metrics"
+	"github.com/penguinpowernz/scanban/pkg/once"
+	"github.com/penguinpowernz/scanban/pkg/rules"
+	"github.com/penguinpowernz/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/threshold"
+	"github.com/penguinpowernz/scanban/pkg/unban"
+	"github.com/penguinpowernz/scanban/pkg/whitelist"
 )
 
 var (
@@ -16,141 +26,90 @@ var (
 	scanAll   bool
 	dropInDir string
 	unbanlist string
+	verbose   bool
+	filename  string
 )
 
 func main() {
 	flag.StringVar(&cfgFile, "c", "/etc/scanban.toml", "config file")
 	flag.StringVar(&dropInDir, "d", "/etc/scanban.d", "drop-in directory")
 	flag.BoolVar(&dryRun, "n", false, "dry run")
+	flag.StringVar(&filename, "f", "", "entire file to scan")
 	flag.BoolVar(&scanAll, "a", false, "scan the entirety of the file, not just new lines")
 	flag.StringVar(&unbanlist, "u", "/var/lib/scanban/unbanlist.toml", "unbanlist file")
+	flag.BoolVar(&verbose, "v", false, "verbose")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	cfg, err := NewConfig(cfgFile)
+	log.Println("loading config")
+	cfg, err := config.LoadFile(cfgFile)
 	if err != nil {
 		log.Fatal(err)
 	}
+	cfg.MergeDropin(dropInDir)
 
-	// merge in any config files from the drop-in directory
-	if dropInDir != "" {
-		filepath.WalkDir(dropInDir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() {
-				return nil
-			}
-			if err := cfg.MergeFile(path); err != nil {
-				log.Println("failed to merge", path, err)
-				return nil
-			}
-			log.Println("merged", path)
-			return nil
-		})
-	}
+	// if err := cfg.Validate(); err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	// open the unban list
-	list, err := NewUnbanList(unbanlist)
+	log.Println("opening unban list")
+	ublist, err := unban.NewList(unbanlist)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// start the unban loop
-	go unbanLoop(ctx, list)
-
-	// make the channel through which any rule violations will be received
-	actionChan := make(chan Action)
-
-	// compile all the rules and start scanning the files
-	for _, fcfg := range cfg.Files {
-		for _, rule := range fcfg.Rules {
-			rule.Compile(fcfg)
-		}
-
-		go scanFile(ctx, actionChan, fcfg)
+	if !dryRun {
+		// start the unban loop
+		log.Println("starting unban loop")
+		go unban.Loop(ctx, ublist)
 	}
 
-	var seq int
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case actn := <-actionChan:
-			seq++
-
-			log.Printf("%d: %s line matches rule for IP %s", seq, actn.Filename, actn.IP)
-			log.Printf("%d: %s", seq, actn.Line)
-
-			cmdstring, found := actn.CmdString(cfg.Actions)
-			if !found {
-				log.Printf("%d SKIP unknown action: %s", seq, actn.Name)
-				continue
-			}
-
-			if err := actn.Valid(cfg); err != nil {
-				log.Printf("%d SKIP %s", seq, err)
-				continue
-			}
-
-			log.Printf("%d: taking action %s: %s", seq, actn.Name, cmdstring)
-
-			if dryRun {
-				log.Printf("%d: SKIP dry run", seq)
-				continue
-			}
-
-			cmd := actn.Cmd(cmdstring)
-			if err := cmd.Run(); err != nil {
-				log.Printf("%d: failed to take action %s on %s: %s", seq, actn.Name, actn.IP, err)
-				continue
-			}
-
-			list.AddEntry(actn)
-		}
-	}
-}
-
-type tailer interface {
-	Tail(ctx context.Context, lines chan string)
-}
-
-func scanFile(ctx context.Context, actionChan chan Action, fcfg *FileConfig) {
-	lines := make(chan string)
-
-	var t tailer
-	var err error
-
+	log.Println("selecting scanner strategy")
+	var scanners scan.Scanners
 	switch {
-	case fcfg.Path != "":
-		t, err = NewTailer(fcfg.Path, !scanAll)
-		if err != nil {
-			log.Printf("failed to open %s: %s", fcfg.Path, err)
-			return
-		}
-	case fcfg.Docker != "":
-		t, err = NewDockerTailer(fcfg.Docker, !scanAll)
-		if err != nil {
-			log.Printf("failed to open %s: %s", fcfg.Docker, err)
-			return
-		}
+	case filename == "-":
+		scanners = scan.FromStdin(dryRun)
+	case filename != "":
+		scanners = scan.FromFile(filename, dryRun)
 	default:
-		log.Printf("failed to open tail: no path or docker specified in config")
-		return
+		scanners = scan.BuildScanners(cfg.Files, dryRun)
 	}
 
-	go t.Tail(ctx, lines)
+	log.Println("buliding line handlers")
+	wl := whitelist.New(cfg.Whitelist)
+	ruls := rules.BuildRules(cfg.Rules)
+	log.Println("built", len(ruls), "rules")
+	eng := rules.NewEngine(ruls)
+	thresholds := threshold.New()
+	actor := actions.BuildActions(cfg.Actions)
+	log.Println("built", len(actor), "actions")
+	logger := logit.New()
+	elogger := logit.Errors(verbose)
 
-	checkLine := makeLineChecker(actionChan, fcfg.Path, fcfg.Rules)
+	log.Println("starting scanner loop")
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case line := <-lines:
-			checkLine(line)
-		}
+	// start all the scanners and listen for line contexts
+	for line := range scanners.Scan(ctx) {
+		// log.Println("got line", line.Line)
+		// bailout.Handle(line)
+		once.Handle(line)       // ensure to process each line only once
+		eng.Handle(line)        // run the line through the rule engine
+		wl.Handle(line)         // ignore the line if the IP is in the whitelist
+		thresholds.Handle(line) // run the line through the threshold checker
+		actor.Handle(line)      // run the actions for any lines that match
+		ublist.Handle(line)     // add the unban actions
+		logger.Handle(line)     // log the action taken (if any) for the line
+		elogger.Handle(line)
+		metrics.Handle(line)
 	}
+
+	metrics.Done()
+	log.Printf("%d lines scanned in %0.2f seconds", metrics.Lines, metrics.Duration)
+	log.Printf("%d actioned, %d rejected", metrics.Actioned, metrics.Errs)
+	log.Println("shutting down")
+	stop()
+	<-ctx.Done()
 }
