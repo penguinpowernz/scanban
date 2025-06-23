@@ -9,6 +9,20 @@ offender.
 This allows us to ban bots that try to brute force SSH endpoints to search for vulnerable phpMyAdmin or
 wordpress instances, and the like.
 
+## Features
+
+- easy configuration
+- regular expression based matching
+- tail new lines from log files and docker container logs in daemon one
+- ban IP addresses for a specific period of time
+- execute custom actions when a ban is triggered
+- execute custom actions when a ban is lifted
+- log actions taken to un/ban
+- test configuration against specific logs with dry run mode
+- whitelist IP addresses
+- drop-in directory support for modular configuration
+- great to pair with `ipset`
+
 ## Usage
 
 The command has the following args:
@@ -32,10 +46,14 @@ Usage of scanban:
 Using `scanban -n -a` is a handy way to see what would happen based on what is in the current files, or feed
 it directly using `scanban -n -f /var/log/auth.log` or `cat /var/log/auth.log | scanban -n -f -`.
 
+The normal mode of operation is to tail new lines from log files and docker containers as a daemon.
+
 When installed from the Debian package it can be manipulated as a systemd service:
 
     systemctl enable scanban
     systemctl start scanban
+
+Please see the [github wiki](https://github.com/penguinpowernz/scanban/wiki) for configuration examples and broader strategies.
 
 ## Configuration
 
@@ -98,6 +116,8 @@ be an something like an iptables command or a path your own script.
 blockit = "iptables -A INPUT -s $ip -j DROP"
 notify = "pingslack"
 unblockit = "iptables -D INPUT -s $ip -j DROP"
+ipsetblock = "ipset add scanban $ip"
+ipsetunblock = "ipset del scanban $ip"
 ```
 
 The variables in the command like `$ip` will be replaced with the offending IP. The commands will be passed through
@@ -152,6 +172,7 @@ ip_regex = " SRC=(\\d+\\.\\d+\\.\\d+\\.\\d+) "
 The output actions are shown in the logs:
 
 ```
+$ scanban -n -f ./auth2.log -c ./scanban.toml -u ./unban.toml
 2025/06/22 21:45:54 loading config
 2025/06/22 21:45:54 opening unban list
 2025/06/22 21:45:54 selecting scanner strategy
@@ -176,3 +197,16 @@ The output actions are shown in the logs:
 # TODO
 
 - [ ] more tests
+- [ ] serve rule triggers via TCP (BYO un/ban tool)
+- [ ] serve rule triggers via UDS (BYO un/ban tool)
+- [ ] IPv6 support
+- [ ] add noop action for monitoring only
+
+# Whats wrong with fail2ban?
+
+To me fail2ban feels like legacy software these days. I wanted to make scanban because:
+
+- I find the configuration format of fail2ban finnicky and overly verbose
+- I like to avoid python software where possible
+- I like single compiled binaries
+- I am a golang fanboi
