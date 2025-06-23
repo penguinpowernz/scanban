@@ -1,0 +1,3 @@
+This is the drop in directory.  Any files ending with .toml will be merged into the main config.
+
+This allows you to easily configure different scanban rules per system.

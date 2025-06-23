@@ -1,12 +1,22 @@
+
+files = [
+  #"/var/log/auth.log",
+  #"docker://influxdb"
+]
+
 whitelist = [
   "127.0.0.1",
+
+  # if you're using docker this ensures that dockers/gateway doesn't get blocked
+  #"172.17.0.0/16",
+  #"172.18.0.0/16",
+  #"172.19.0.0/16",
+  #"172.20.0.0/16",
 ]
 
 bantime = 24 # hours
 
 [actions]
-ipsetblock = "ipset add blacklist $ip"
-ipsetunblock = "ipset del blacklist $ip"
-blackhole = "ip route add blackhole $ip"
-unblackhole = "ip route delete blackhole $ip"
-slackalert = "slackalert '$desc $ip'"
+ipsetblock = "ipset add scanban $ip"
+ipsetunblock = "ipset del scanban $ip"
+#slackalert = "/usr/bin/slackalert '$desc $ip'"
