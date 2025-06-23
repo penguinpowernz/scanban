@@ -13,7 +13,7 @@ wordpress instances, and the like.
 
 - easy configuration
 - regular expression based matching
-- tail new lines from log files and docker container logs in daemon one
+- tail new lines from log files and docker container logs
 - ban IP addresses for a specific period of time
 - execute custom actions when a ban is triggered
 - execute custom actions when a ban is lifted
