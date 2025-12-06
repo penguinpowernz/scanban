@@ -1,5 +1,10 @@
 #!/bin/bash
 
-# your code goes here
+test -f /etc/scanban.yml || cp /usr/share/scanban/etc/scanban.yml /etc;
+test -d /etc/scanban.d || cp -r /usr/share/scanban/etc/scanban.d /etc;
+test -d /var/lib/scanban || cp -r /usr/share/scanban/var/lib/scanban /var/lib;
+
+chown -R root:root /etc/scanban.yml /usr/share/scanban /var/lib/scanban /etc/scanban.d
+chmod -R 600 /etc/scanban.yml /usr/share/scanban /var/lib/scanban /etc/scanban.d
 
 exit 0;
