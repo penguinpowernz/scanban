@@ -73,6 +73,16 @@ func (c *Config) MergeDropin(dir string) {
 			log.Println("merged", path)
 			return nil
 		})
+
+		// ensure the files to scan are unique
+		files := make(map[string]bool)
+		for _, f := range c.Files {
+			files[f] = true
+		}
+		c.Files = make([]string, 0, len(files))
+		for f := range files {
+			c.Files = append(c.Files, f)
+		}
 	}
 }
 

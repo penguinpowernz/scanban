@@ -1,4 +1,4 @@
-module github.com/penguinpower/scanban
+module github.com/penguinpowernz/scanban
 
 go 1.21.4
 

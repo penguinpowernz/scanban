@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/penguinpower/scanban/pkg/actions"
@@ -62,7 +63,7 @@ func main() {
 	}
 
 	if !dryRun {
-		// start the unban loop
+	// start the unban loop
 		log.Println("starting unban loop")
 		go unban.Loop(ctx, ublist)
 	}
@@ -104,7 +105,7 @@ func main() {
 		logger.Handle(line)     // log the action taken (if any) for the line
 		elogger.Handle(line)
 		metrics.Handle(line)
-	}
+		}
 
 	metrics.Done()
 	log.Printf("%d lines scanned in %0.2f seconds", metrics.Lines, metrics.Duration)

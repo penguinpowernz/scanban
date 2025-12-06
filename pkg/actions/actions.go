@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/penguinpower/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
 type Action struct {

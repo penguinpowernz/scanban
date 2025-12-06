@@ -3,7 +3,7 @@ package once
 import (
 	"crypto/md5"
 
-	"github.com/penguinpower/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
 var seenHashes = make([]string, 0, 50)

@@ -3,7 +3,7 @@ package actions
 import (
 	"testing"
 
-	"github.com/penguinpower/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 	"github.com/stretchr/testify/assert"
 )
 

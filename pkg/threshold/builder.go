@@ -1,7 +1,7 @@
 package threshold
 
 import (
-	"github.com/penguinpower/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
 func New() *Threshold {

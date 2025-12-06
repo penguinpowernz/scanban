@@ -4,7 +4,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/penguinpower/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
 func New(ips []string) *List {

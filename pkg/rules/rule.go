@@ -3,8 +3,8 @@ package rules
 import (
 	"regexp"
 
-	"github.com/penguinpower/scanban/pkg/config"
-	"github.com/penguinpower/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/config"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
 type Rule struct {

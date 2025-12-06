@@ -3,7 +3,7 @@ package bailout
 import (
 	"log"
 
-	"github.com/penguinpower/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
 var count int

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/penguinpower/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
 func NewList(fn string) (*List, error) {
@@ -87,19 +87,19 @@ func (list *List) Handle(c *scan.Context) {
 	}
 
 	if !c.DryRun {
-		list.mu.Lock()
-		defer list.mu.Unlock()
+	list.mu.Lock()
+	defer list.mu.Unlock()
 
-		list.Entries = append(list.Entries, UnbanEntry{
+	list.Entries = append(list.Entries, UnbanEntry{
 			Action: c.UnbanAction,
 			IP:     c.IP,
 			After:  c.ReleaseTime(),
-		})
+	})
 
 		if err := list.save(); err != nil {
 			log.Printf("failed to save unban list: %s", err)
 		}
-	}
+}
 
 	c.UnbanScheduled = true
 	c.UnbanAt = c.ReleaseTime()

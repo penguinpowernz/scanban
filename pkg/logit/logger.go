@@ -3,7 +3,7 @@ package logit
 import (
 	"log"
 
-	"github.com/penguinpower/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
 func New() *Logger {

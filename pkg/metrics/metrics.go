@@ -3,7 +3,7 @@ package metrics
 import (
 	"time"
 
-	"github.com/penguinpower/scanban/pkg/scan"
+	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
 var (
