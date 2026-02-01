@@ -354,3 +354,5 @@ Issues and pull requests welcome at https://github.com/penguinpowernz/scanban
 - [x] add a drop in for blocking IPs based on tripwires
 - [x] add a drop in for blocking IPs based on bad SSH login attempts
 - [ ] properly handle reverse DNS/PTR records based IPs
+- [x] protect against log injection attacks
+- [ ] rate limit action execution

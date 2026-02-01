@@ -1,9 +1,11 @@
 package rules
 
 import (
+	"log"
 	"regexp"
 
 	"github.com/penguinpowernz/scanban/pkg/config"
+	"github.com/penguinpowernz/scanban/pkg/sanitize"
 	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
@@ -44,6 +46,26 @@ func (r *Rule) Handle(c *scan.Context) {
 }
 
 func newRule(cfg *config.RuleConfig) *Rule {
+	// Validate IP regex pattern
+	if err := sanitize.ValidateRegex(cfg.IpRegex); err != nil {
+		log.Printf("WARNING: Invalid or dangerous IP regex pattern, using default: %s", cfg.IpRegex)
+		cfg.IpRegex = `(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})`
+	}
+
+	// Validate all pattern regexes
+	var safePatterns []string
+	for _, ptn := range cfg.Patterns {
+		if err := sanitize.ValidateRegex(ptn); err != nil {
+			log.Printf("WARNING: Skipping invalid or dangerous pattern: %s", ptn)
+			continue
+		}
+		safePatterns = append(safePatterns, ptn)
+	}
+
+	if len(safePatterns) == 0 {
+		log.Printf("WARNING: No valid patterns for rule, rule will never match")
+	}
+
 	return &Rule{
 		Action:      cfg.Action,
 		UnbanAction: cfg.UnbanAction,
@@ -52,7 +74,7 @@ func newRule(cfg *config.RuleConfig) *Rule {
 		ipre:        regexp.MustCompile(cfg.IpRegex),
 		ptns: func() []*regexp.Regexp {
 			var ptns []*regexp.Regexp
-			for _, ptn := range cfg.Patterns {
+			for _, ptn := range safePatterns {
 				ptns = append(ptns, regexp.MustCompile(ptn))
 			}
 			return ptns

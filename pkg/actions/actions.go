@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/penguinpowernz/scanban/pkg/sanitize"
 	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
@@ -48,15 +49,21 @@ func (a *Action) execute(c *scan.Context) error {
 		return nil
 	}
 
-	cmdstring := strings.ReplaceAll(a.command, "$ip", c.IP)
+	// Sanitize IP to prevent command injection
+	safeIP := sanitize.IP(c.IP)
+	if safeIP == "" {
+		return fmt.Errorf("invalid or dangerous IP address: %s", c.IP)
+	}
+
+	cmdstring := strings.ReplaceAll(a.command, "$ip", safeIP)
 	cmd := exec.Command("/bin/bash", "-c", cmdstring)
-	cmd.Env = append(cmd.Env, "SB_IP="+c.IP)
+	cmd.Env = append(cmd.Env, "SB_IP="+safeIP)
 	// cmd.Env = append(cmd.Env, "SB_DESC="+c.Desc)
 	cmd.Env = append(cmd.Env, "SB_BANTIME="+fmt.Sprintf("%d", c.BanTime))
-	cmd.Env = append(cmd.Env, "SB_FILENAME="+c.Filename)
-	cmd.Env = append(cmd.Env, "SB_LINE="+c.Line)
+	cmd.Env = append(cmd.Env, "SB_FILENAME="+sanitize.EnvVar(c.Filename))
+	cmd.Env = append(cmd.Env, "SB_LINE="+sanitize.EnvVar(c.Line))
 	// cmd.Env = append(cmd.Env, "SB_NAME="+c.Name)
-	cmd.Env = append(cmd.Env, "SB_UNBANACTION="+c.UnbanAction)
+	cmd.Env = append(cmd.Env, "SB_UNBANACTION="+sanitize.EnvVar(c.UnbanAction))
 	return cmd.Run()
 }
 
