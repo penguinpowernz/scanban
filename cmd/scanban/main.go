@@ -38,7 +38,7 @@ func main() {
 	flag.BoolVar(&dryRun, "n", false, "dry run")
 	flag.StringVar(&filename, "f", "", "entire file to scan")
 	flag.BoolVar(&scanAll, "a", false, "scan the entirety of the file, not just new lines")
-	flag.StringVar(&unbanlist, "u", "/var/lib/scanban/unbanlist.toml", "unbanlist file")
+	flag.StringVar(&unbanlist, "u", "", "unbanlist file")
 	flag.BoolVar(&verbose, "v", false, "verbose")
 	flag.BoolVar(&dumpCfg, "x", false, "dump complete merged config")
 	flag.BoolVar(&testCfg, "t", false, "test complete merged config")
@@ -139,6 +139,10 @@ func overwriteConfigWithFlags(cfg *config.Config) {
 		dropInDir = cfg.Include
 	}
 
+	if unbanlist != "" {
+		cfg.UnbanList = unbanlist
+	}
+
 	if dryRun {
 		cfg.DryRun = true
 	}
@@ -154,4 +158,5 @@ func overwriteConfigWithFlags(cfg *config.Config) {
 	if cfg.DryRun {
 		dryRun = true
 	}
+
 }

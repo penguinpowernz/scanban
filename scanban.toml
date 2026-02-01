@@ -6,7 +6,7 @@ files = [
   "docker://influxdb"
 ]
 
-ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"
+ip_regex = '(\d+\.\d+\.\d+\.\d+)'
 bantime = 24
 action = "ipsetblock"
 unban_action = "ipsetunblock"
@@ -38,9 +38,9 @@ ipsetunblock = "tipset del scanban $ip"
 # Jun 21 12:53:34 tunnel sshd[27153]: Did not receive identification string from 69.162.124.238
 [[rules]]
 patterns = [
-  "sshd.*Invalid user \\w+ from",
-  "sshd.*User \\w+ from .* not allowed because not listed in AllowUsers",
-  "sshd.*Did not receive identification string from"
+  'sshd.*Invalid user \w+ from',
+  'sshd.*User \w+ from .* not allowed because not listed in AllowUsers',
+  'sshd.*Did not receive identification string from'
 ]
-ip_regex = "from (\\d+.\\d+.\\d+.\\d+)"
+ip_regex = 'from (\d+.\d+.\d+.\d+)'
 threshold = 1
