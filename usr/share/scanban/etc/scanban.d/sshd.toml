@@ -1,0 +1,12 @@
+# this picks up SSH brute force attempts, you may like to give extra threshold in case you fat finger 
+# your username, let alone your password
+
+# [[rules]]
+# patterns = [
+#   'sshd.*Invalid user \w+ from',
+#   'sshd.*User \w+ from .* not allowed because not listed in AllowUsers',
+#   'sshd.*Did not receive identification string from',
+#   'sshd.*Failed password for'
+# ]
+# ip_regex = 'from (\d+.\d+.\d+.\d+)'
+# threshold = 3

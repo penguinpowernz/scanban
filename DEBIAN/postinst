@@ -1,9 +1,17 @@
 #!/bin/bash
 
+# only copy the defaults if they don't exist
 test -f /etc/scanban.yml || cp /usr/share/scanban/etc/scanban.yml /etc;
 test -d /etc/scanban.d || cp -r /usr/share/scanban/etc/scanban.d /etc;
 test -d /var/lib/scanban || cp -r /usr/share/scanban/var/lib/scanban /var/lib;
+touch /var/lib/scanban/unbanlist.toml;
 
+# copy any additional config files that don't exist
+for i in /usr/share/scanban/etc/scanban.d/*.toml; do
+  test -f "/etc/scanban.d/$(basename $i)" || cp $i "/etc/scanban.d/$(basename $i)";
+done
+
+# MAKE SURE THIS IS LAST - set permissions on all files
 chown -R root:root /etc/scanban.yml /usr/share/scanban /var/lib/scanban /etc/scanban.d
 chmod -R 600 /etc/scanban.yml /usr/share/scanban /var/lib/scanban /etc/scanban.d
 
