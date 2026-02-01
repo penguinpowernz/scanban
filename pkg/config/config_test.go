@@ -41,7 +41,7 @@ func TestFullConfigV2(t *testing.T) {
 	assert.Contains(t, cfg.Whitelist, "192.168.1.0/24")
 
 	assert.Equal(t, cfg.Bantime, 24)
-	assert.Equal(t, cfg.IpRegex, "(\\d+.\\d+.\\d+.\\d+)")
+	assert.Equal(t, cfg.IpRegex, `(\d+\.\d+\.\d+\.\d+)`)
 	assert.Equal(t, cfg.Action, "ipsetblock")
 	assert.Equal(t, cfg.UnbanAction, "ipsetunblock")
 }
@@ -51,7 +51,7 @@ func TestRuleCompile(t *testing.T) {
 	assert.Nil(t, err)
 
 	assert.Equal(t, cfg.Bantime, 24)
-	assert.Equal(t, cfg.IpRegex, "(\\d+.\\d+.\\d+.\\d+)")
+	assert.Equal(t, cfg.IpRegex, `(\d+\.\d+\.\d+\.\d+)`)
 	assert.Equal(t, cfg.Action, "ipsetblock")
 	assert.Equal(t, cfg.UnbanAction, "ipsetunblock")
 
@@ -68,7 +68,7 @@ func TestRuleCompile(t *testing.T) {
 	assert.Len(t, rules[1].Patterns, 2)
 	assert.Contains(t, rules[1].Patterns, "wp-admin")
 	assert.Contains(t, rules[1].Patterns, "phpMyAdmin")
-	assert.Equal(t, rules[1].IpRegex, `(\d+.\d+.\d+.\d+)`)
+	assert.Equal(t, rules[1].IpRegex, `(\d+\.\d+\.\d+\.\d+)`)
 	assert.Equal(t, rules[1].Threshold, 10)
 	assert.Equal(t, rules[1].Bantime, 12)
 	assert.Equal(t, rules[1].Action, "blockit")
@@ -83,7 +83,7 @@ func TestRuleIPRegex(t *testing.T) {
 	re := regexp.MustCompile(r.IpRegex)
 
 	matches := re.FindAllStringSubmatch(" SRC=89.0.142.86 ", -1)
-	assert.Equal(t, re.String(), " SRC=(\\d+\\.\\d+\\.\\d+\\.\\d+) ")
+	assert.Equal(t, re.String(), ` SRC=(\d+\.\d+\.\d+\.\d+) `)
 	assert.Equal(t, 1, len(matches))
 	assert.Equal(t, matches[0][1], "89.0.142.86")
 }
@@ -137,7 +137,7 @@ whitelist = [
 	"192.168.1.0/24"
 ]
 
-ip_regex = "(\\d+.\\d+.\\d+.\\d+)"
+ip_regex = '(\d+\.\d+\.\d+\.\d+)'
 bantime = 24
 threshold = 3
 action = "ipsetblock"
@@ -151,8 +151,8 @@ ipsetblock = "ipset add scanban $ip"
 ipsetunblock = "ipset del scanban $ip"
 
 [[rules]]
-pattern = "IN=\\w+ .*DPT=143"
-ip_regex = " SRC=(\\d+\\.\\d+\\.\\d+\\.\\d+) "
+pattern = 'IN=\w+ .*DPT=143'
+ip_regex = ' SRC=(\d+\.\d+\.\d+\.\d+) '
 
 [[rules]]
 patterns = [
