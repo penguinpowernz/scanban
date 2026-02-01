@@ -1,3 +1,10 @@
+#dry_run = true
+#verbose = true
+#include = /etc/scanban.d
+#do_bans = true
+#do_unbans = true
+#byo_tcp = "127.0.0.1:7733"
+#byo_uds = "/var/run/scanban.socket
 
 files = [
   #"/var/log/auth.log",

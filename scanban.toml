@@ -43,4 +43,4 @@ patterns = [
   "sshd.*Did not receive identification string from"
 ]
 ip_regex = "from (\\d+.\\d+.\\d+.\\d+)"
-threshold = 3
+threshold = 1
