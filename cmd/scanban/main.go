@@ -72,13 +72,13 @@ func main() {
 
 	// open the unban list
 	log.Println("opening unban list")
-	ublist, err := unban.NewList(unbanlist)
+	ublist, err := unban.NewList(cfg.UnbanList, cfg.DoUnbans)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if !dryRun {
-	// start the unban loop
+	if !dryRun && cfg.DoUnbans {
+		// start the unban loop
 		log.Println("starting unban loop")
 		go unban.Loop(ctx, ublist)
 	}
@@ -100,8 +100,10 @@ func main() {
 	log.Println("built", len(ruls), "rules")
 	eng := rules.NewEngine(ruls)
 	thresholds := threshold.New()
-	actor := actions.BuildActions(cfg.Actions)
+	actor := actions.BuildActions(cfg.Actions, cfg.DoBans)
 	log.Println("built", len(actor), "actions")
+	// tcp := byo.NewTCP(bind)
+	// uds := byo.NewUDS(udsfile)
 	logger := logit.New()
 	elogger := logit.Errors(verbose)
 
@@ -120,7 +122,9 @@ func main() {
 		logger.Handle(line)     // log the action taken (if any) for the line
 		elogger.Handle(line)
 		metrics.Handle(line)
-		}
+		// uds.Handle(line)
+		// tcp.Handle(line)
+	}
 
 	metrics.Done()
 	log.Printf("%d lines scanned in %0.2f seconds", metrics.Lines, metrics.Duration)

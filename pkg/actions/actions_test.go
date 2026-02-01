@@ -14,7 +14,7 @@ func TestBuildActions(t *testing.T) {
 		"test2": "echo test2",
 	}
 
-	actions := BuildActions(actionMap)
+	actions := BuildActions(actionMap, true)
 
 	assert.Len(t, actions, 2, "BuildActions should create correct number of actions")
 	assert.Equal(t, "test1", actions[0].name, "First action name should match")

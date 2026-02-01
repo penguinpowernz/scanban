@@ -14,13 +14,13 @@ import (
 	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
-func NewList(fn string) (*List, error) {
+func NewList(fn string, do bool) (*List, error) {
 	data, err := os.ReadFile(fn)
 	if err != nil {
 		return nil, err
 	}
 
-	list := &List{fn: fn, mu: new(sync.RWMutex)}
+	list := &List{fn: fn, mu: new(sync.RWMutex), doUnbans: do}
 	if len(data) > 0 {
 		if _, err := toml.Decode(string(data), list); err != nil {
 			return nil, err
@@ -40,9 +40,10 @@ func NewList(fn string) (*List, error) {
 }
 
 type List struct {
-	mu      *sync.RWMutex
-	fn      string
-	execute func(entry UnbanEntry) bool
+	mu       *sync.RWMutex
+	fn       string
+	doUnbans bool
+	execute  func(entry UnbanEntry) bool
 
 	Entries []UnbanEntry `json:"entries"`
 }
@@ -83,6 +84,10 @@ func (list *List) Handle(c *scan.Context) {
 	}
 
 	if c.UnbanAction == "" {
+		return
+	}
+
+	if !list.doUnbans {
 		return
 	}
 

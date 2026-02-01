@@ -8,6 +8,13 @@ import (
 	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
+var (
+	doBans = true
+)
+
+// Action represents a single action that may
+// be taken by the rules.  It has a name and
+// the actual command to be executed
 type Action struct {
 	name    string
 	command string
@@ -20,6 +27,10 @@ func (a *Action) Handle(c *scan.Context) {
 
 	if c.Action == "" {
 		c.Err("no action to be done")
+		return
+	}
+
+	if !doBans {
 		return
 	}
 
@@ -51,7 +62,7 @@ func (a *Action) execute(c *scan.Context) error {
 
 type Actions []*Action
 
-func BuildActions(actions map[string]string) Actions {
+func BuildActions(actions map[string]string, do bool) Actions {
 	aa := new(Actions)
 	var x int
 	for k, v := range actions {
@@ -61,6 +72,7 @@ func BuildActions(actions map[string]string) Actions {
 		})
 		x++
 	}
+	doBans = do
 	return *aa
 }
 

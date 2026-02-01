@@ -82,6 +82,7 @@ func (c *Config) Compile() {
 	}
 }
 
+// MergeDropin reads all files in the given directory and merges each of them into the config
 func (c *Config) MergeDropin(dir string) {
 	if dir != "" {
 		filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
@@ -111,6 +112,7 @@ func (c *Config) MergeDropin(dir string) {
 	}
 }
 
+// Merge merges the given config into the current one
 func (c *Config) Merge(cfg *Config) {
 	if cfg == nil {
 		return
@@ -122,6 +124,7 @@ func (c *Config) Merge(cfg *Config) {
 	c.Files = append(c.Files, cfg.Files...)
 }
 
+// MergeFile reads the given file and merges it into the config
 func (c *Config) MergeFile(filename string) error {
 	if !strings.HasSuffix(filename, ".toml") {
 		return nil
@@ -136,6 +139,7 @@ func (c *Config) MergeFile(filename string) error {
 	return nil
 }
 
+// RuleConfig is the config for a specific rule
 type RuleConfig struct {
 	IpRegex     string `toml:"ip_regex,omitempty"`
 	Action      string `toml:"action,omitempty"`
@@ -148,6 +152,8 @@ type RuleConfig struct {
 	Patterns []string `toml:"patterns"`
 }
 
+// Compile ensures all fields are set by copying any that
+// are not from the global settings in top level
 func (r *RuleConfig) Compile(cfg *Config) {
 	if r.IpRegex == "" {
 		r.IpRegex = cfg.IpRegex
