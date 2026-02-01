@@ -34,13 +34,13 @@ Usage of scanban:
   -c string
         config file (default "/etc/scanban.toml")
   -d string
-        drop-in directory (default "/etc/scanban.d")
+        drop-in directory
   -f string
         entire file to scan
   -n    dry run
-  -u string
-        unbanlist file (default "/var/lib/scanban/unbanlist.toml")
+  -t    test complete merged config
   -v    verbose
+  -x    dump complete merged config
 ```
 
 Using `scanban -n -a` is a handy way to see what would happen based on what is in the current files, or feed
@@ -66,12 +66,34 @@ Unfortunately the TOML format requires double escapes in the regular expression 
 **Unbanning** is required so that you don't fill up memory and IP tables with banned IPs which can
 hamper performance - also the bot machines don't use the same host for long.
 
+| Key | Description | Example |
+|---|---|---|
+| files | List of files to scan | `files = ["/var/log/auth.log", "/var/log/ufw.log"]` |
+| whitelist | List of IP addresses to never ban | `whitelist = ["127.0.0.1", "192.168.1.0/24"]` |
+| bantime | The length of time to ban for (in hours) | `bantime = 1` |
+| threshold | The number of times an IP should be seen offending before being banned | `threshold = 3` |
+| ip_regex | Default regular expression to match IP addresses | `ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"` |
+| action | Default action to take when an IP is banned | `action = "blockit"` |
+| unban_action | Default action to take when an IP is unbanned | `unban_action = "unblockit"` |
+| dry_run | Enable dry run mode | `dry_run = true` |
+| verbose | Enable verbose mode | `verbose = true` |
+| unban_list | Path to the unban list file | `unban_list = "/var/lib/unscanban.toml"` |
+| do_bans | Enable banning | `do_bans = true` |
+| do_unbans | Enable unbanning | `do_unbans = true` |
+| byo_tcp | Bind to a TCP address to deliver ban events | `byo_tcp = "127.0.0.1:7733"` |
+| byo_uds | Bind to a Unix Domain Socket to deliver ban events | `byo_uds = "/var/run/scanban.socket"` |
+
 ### Global
 
 A number of variables can be defined at the top level of the config file so that you don't need to
 set them for every single rule.  Each rule can override these in it's own definition.
 
 ```toml
+dry_run = false
+verbose = false
+do_bans = true
+do_unbans = true
+
 bantime = 1
 threshold = 3
 ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"
@@ -140,6 +162,18 @@ the following envvars:
 The rules are setup with the array style toml section that uses the double brackets and is based around a pattern or
 set of patterns.  These patterns are used to match against the scanned logged lines.  Any that don't match will be
 ignored while ones that match will be further processed.
+
+| Key | Description | Example |
+|---|---|---|
+| pattern | The pattern to match against | `pattern = "Authentication failed"` |
+| patterns | A list of patterns to match against | `patterns = ["Authentication failed", "sshd.*Invalid user \\w+ from"]` |
+| ip_regex | *Optional* The regular expression to match IP addresses | `ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"` |
+| action | *Optional* The action to take when an IP is banned | `action = "blockit"` |
+| unban_action | *Optional* The action to take when an IP is unbanned | `unban_action = "unblockit"` |
+| bantime | *Optional* The length of time to ban for (in hours) | `bantime = 1` |
+| threshold | *Optional* The number of times an IP should be seen offending before being banned | `threshold = 3` |
+
+You can use a single pattern to match against.
 
 ```toml
 [[rules]]
