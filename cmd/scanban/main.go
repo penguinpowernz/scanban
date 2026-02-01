@@ -28,6 +28,8 @@ var (
 	dropInDir string
 	unbanlist string
 	verbose   bool
+	dumpCfg   bool
+	testCfg   bool
 	filename  string
 )
 
@@ -39,6 +41,8 @@ func main() {
 	flag.BoolVar(&scanAll, "a", false, "scan the entirety of the file, not just new lines")
 	flag.StringVar(&unbanlist, "u", "/var/lib/scanban/unbanlist.toml", "unbanlist file")
 	flag.BoolVar(&verbose, "v", false, "verbose")
+	flag.BoolVar(&dumpCfg, "x", false, "dump complete merged config")
+	flag.BoolVar(&testCfg, "t", false, "test complete merged config")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -49,11 +53,22 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	overwriteConfigWithFlags(cfg)
 	cfg.MergeDropin(dropInDir)
 
 	// if err := cfg.Validate(); err != nil {
 	// 	log.Fatal(err)
 	// }
+
+	if testCfg {
+		return
+	}
+
+	if dumpCfg {
+		cfg.Encode(os.Stdout)
+		return
+	}
 
 	// open the unban list
 	log.Println("opening unban list")
@@ -113,4 +128,27 @@ func main() {
 	log.Println("shutting down")
 	stop()
 	<-ctx.Done()
+}
+
+// overwriteConfigWithFlags overwrites the loaded config file, with the CLI flags
+func overwriteConfigWithFlags(cfg *config.Config) {
+	if cfg.Include != "" && dropInDir == "" {
+		dropInDir = cfg.Include
+	}
+
+	if dryRun {
+		cfg.DryRun = true
+	}
+
+	if verbose {
+		cfg.Verbose = true
+	}
+
+	if cfg.Verbose {
+		verbose = true
+	}
+
+	if cfg.DryRun {
+		dryRun = true
+	}
 }

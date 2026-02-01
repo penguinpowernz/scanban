@@ -1,6 +1,7 @@
 package config
 
 import (
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -9,21 +10,30 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+func New() *Config {
+	cfg := new(Config)
+	cfg.DoBans = true
+	cfg.DoUnbans = true
+	cfg.UnbanList = "/var/lib/unscanban.toml"
+	cfg.Include = "/etc/scanban.d"
+	return cfg
+}
+
 func LoadFile(fn string) (*Config, error) {
 	data, err := os.ReadFile(fn)
 	if err != nil {
 		return nil, err
 	}
-	var cfg Config
+	var cfg = New()
 	if _, err := toml.Decode(string(data), &cfg); err != nil {
 		return nil, err
 	}
 	cfg.Compile()
-	return &cfg, nil
+	return cfg, nil
 }
 
 func Decode(data []byte) (*Config, error) {
-	cfg := new(Config)
+	cfg := New()
 	if _, err := toml.Decode(string(data), &cfg); err != nil {
 		return nil, err
 	}
@@ -41,6 +51,17 @@ type Config struct {
 	Action      string            `toml:"action"`
 	Threshold   int               `toml:"threshold"`
 	Rules       []*RuleConfig     `toml:"rules"`
+
+	DryRun    bool   `toml:"dry_run"`
+	Verbose   bool   `toml:"verbose"`
+	DoBans    bool   `toml:"do_bans"`
+	DoUnbans  bool   `toml:"do_unbans"`
+	UnbanList string `toml:"unban_list"`
+
+	// ByoTCP string `toml:"byo_tcp"`
+	// ByoUDS string `toml:"byo_uds"`
+
+	Include string `toml:"include"`
 }
 
 func (c *Config) Validate() error {
@@ -49,6 +70,10 @@ func (c *Config) Validate() error {
 	// TODO: check all IPs in the whitelist are valid
 
 	return nil
+}
+
+func (c *Config) Encode(w io.Writer) error {
+	return toml.NewEncoder(w).Encode(c)
 }
 
 func (c *Config) Compile() {
