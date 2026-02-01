@@ -1,31 +1,75 @@
 # scanban
 
-A simple alternative to fail2ban.
+A lightweight, fast alternative to fail2ban written in Go.
 
-System logs are scanned for certain patterns that indicate a malicious host is trying to scan the machine
-for exploits.  If the IP of the malicious host can be found on the log line, we can use that to ban the
-offender.
+Scanban monitors system logs for patterns that indicate malicious activity (brute force attempts, exploit scanning, etc.), extracts offending IP addresses and automatically bans them for a configurable period of time. It works by tailing log files and Docker container logs in real-time, matching lines against regular expression patterns, and executing custom actions (fully configurable, typically iptables or ipset commands) to block attackers.
 
-This allows us to ban bots that try to brute force SSH endpoints to search for vulnerable phpMyAdmin or
-wordpress instances, and the like.
+With the correct config you can block attackers during recon, before an attack even takes place by
+assuming that if they are scanning for one exploit, they may scan for others.
 
 ## Features
 
-- easy configuration
-- regular expression based matching
-- tail new lines from log files and docker container logs
-- ban IP addresses for a specific period of time
-- execute custom actions when a ban is triggered
-- execute custom actions when a ban is lifted
-- log actions taken to un/ban
-- test configuration against specific logs with dry run mode
-- whitelist IP addresses
-- drop-in directory support for modular configuration
-- great to pair with `ipset`
+- **Easy configuration** - Simple TOML format with sensible defaults
+- **Regular expression based matching** - Flexible pattern matching for any log format
+- **Multiple log sources** - Tail files and Docker container logs simultaneously
+- **Time-based banning** - Automatically ban and unban IPs after a specified duration
+- **Customizable actions** - Execute any shell command for ban/unban operations
+- **Threshold support** - Require multiple offenses before banning
+- **Whitelisting** - Never ban specific IPs or subnets
+- **Dry run mode** - Test your configuration without taking any action
+- **Drop-in configuration** - Modular config files in `/etc/scanban.d/`
+- **Works great with ipset** - Efficient IP blocking for high-volume scenarios
 
-## Usage
+## Quickstart
 
-The command has the following args:
+### Test Against a Log File
+
+Before running scanban as a daemon, test your configuration against existing logs:
+
+```bash
+# Dry run against a specific log file
+scanban -n -f /var/log/auth.log -c /etc/scanban.toml
+
+# Scan entire file (not just new lines) with verbose output
+scanban -n -a -v -f /var/log/auth.log
+
+# Test from stdin
+cat /var/log/auth.log | scanban -n -f -
+```
+
+The dry run mode (`-n`) shows what would be banned without actually executing any actions.
+
+### Setup as Systemd Daemon (Debian Package)
+
+If you installed scanban from the Debian package:
+
+1. **Configure scanban** - Edit `/etc/scanban.toml` to define your rules and actions (see Configuration section below)
+
+2. **Set secure permissions** - The config file contains shell commands that will be executed so ensure only root has access:
+   ```bash
+   sudo chmod 600 /etc/scanban.toml
+   sudo chown root:root /etc/scanban.toml
+   ```
+
+3. **Enable and start the service**:
+   ```bash
+   sudo systemctl enable scanban
+   sudo systemctl start scanban
+   ```
+
+4. **Check the status**:
+   ```bash
+   sudo systemctl status scanban
+   ```
+
+5. **View logs**:
+   ```bash
+   sudo journalctl -u scanban -f
+   ```
+
+In daemon mode, scanban continuously tails the configured log files and takes action in real-time as malicious activity is detected.
+
+## Command Line Options
 
 ```
 $ scanban -h
@@ -34,154 +78,161 @@ Usage of scanban:
   -c string
         config file (default "/etc/scanban.toml")
   -d string
-        drop-in directory
+        drop-in directory (default "/etc/scanban.d")
   -f string
-        entire file to scan
-  -n    dry run
+        specific file to scan
+  -n    dry run (show what would happen without taking action)
   -t    test complete merged config
-  -v    verbose
+  -u string
+        unbanlist file (default "/var/lib/scanban/unbanlist.toml")
+  -v    verbose output
   -x    dump complete merged config
 ```
 
-Using `scanban -n -a` is a handy way to see what would happen based on what is in the current files, or feed
-it directly using `scanban -n -f /var/log/auth.log` or `cat /var/log/auth.log | scanban -n -f -`.
+**Common usage patterns:**
 
-The normal mode of operation is to tail new lines from log files and docker containers as a daemon.
-
-When installed from the Debian package it can be manipulated as a systemd service:
-
-    systemctl enable scanban
-    systemctl start scanban
-
-Please see the [github wiki](https://github.com/penguinpowernz/scanban/wiki) for configuration examples and broader strategies.
+- **Daemon mode**: `scanban` (uses config file to tail configured logs)
+- **Test configuration**: `scanban -n -a -v` (dry run against all configured files)
+- **Scan specific file**: `scanban -n -f /var/log/auth.log`
+- **Scan from stdin**: `cat /var/log/auth.log | scanban -n -f -`
+- **Debug config**: `scanban -x` (dump merged configuration)
 
 ## Configuration
 
-The configuration file can be found at `/etc/scanban.toml` and extra configs can be dropped
-into `/etc/scanban.d` to keep things tidy (must have the extension `.toml`). As these config
-files define commands to run, **it is important to keep strict permissons, 0600 recommended**.
+For more configuration examples and deployment strategies, see the [github wiki](https://github.com/penguinpowernz/scanban/wiki).
 
-Unfortunately the TOML format requires double escapes in the regular expression definitions.
+The main configuration file is located at `/etc/scanban.toml`. Additional configuration files can be placed in `/etc/scanban.d/` (must have `.toml` extension) for better organization - these will be automatically merged with the main config.
 
-**Unbanning** is required so that you don't fill up memory and IP tables with banned IPs which can
-hamper performance - also the bot machines don't use the same host for long.
+**Security Note:** Since config files contain shell commands that will be executed as root, keep strict permissions: `chmod 600` and `chown root:root` are recommended.
+
+**Important:** TOML format requires escaping in regular expressions:
+- **Double-quoted strings**: Use double backslashes: `"\\d+"` instead of `"\d+"`
+- **Single-quoted strings**: Use single backslashes: `'\d+'` (no escaping needed for backslashes)
+
+**Unbanning:** Automatic unbanning is essential to prevent memory exhaustion and iptables bloat. Attackers typically don't reuse the same IP for extended periods, so temporary bans (hours to days) are sufficient and more performant than permanent bans.
+
+### Configuration Reference
 
 | Key | Description | Example |
 |---|---|---|
-| files | List of files to scan | `files = ["/var/log/auth.log", "/var/log/ufw.log"]` |
-| whitelist | List of IP addresses to never ban | `whitelist = ["127.0.0.1", "192.168.1.0/24"]` |
-| bantime | The length of time to ban for (in hours) | `bantime = 1` |
-| threshold | The number of times an IP should be seen offending before being banned | `threshold = 3` |
-| ip_regex | Default regular expression to match IP addresses | `ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"` |
-| action | Default action to take when an IP is banned | `action = "blockit"` |
-| unban_action | Default action to take when an IP is unbanned | `unban_action = "unblockit"` |
-| dry_run | Enable dry run mode | `dry_run = true` |
-| verbose | Enable verbose mode | `verbose = true` |
-| unban_list | Path to the unban list file | `unban_list = "/var/lib/unscanban.toml"` |
-| do_bans | Enable banning | `do_bans = true` |
-| do_unbans | Enable unbanning | `do_unbans = true` |
-| byo_tcp | Bind to a TCP address to deliver ban events | `byo_tcp = "127.0.0.1:7733"` |
-| byo_uds | Bind to a Unix Domain Socket to deliver ban events | `byo_uds = "/var/run/scanban.socket"` |
+| `files` | List of log files or Docker containers to monitor | `files = ["/var/log/auth.log", "docker://nginx"]` |
+| `whitelist` | IP addresses or CIDR ranges to never ban | `whitelist = ["127.0.0.1", "192.168.1.0/24"]` |
+| `bantime` | Duration to ban IPs (in hours) | `bantime = 24` |
+| `threshold` | Number of offenses required before banning | `threshold = 3` |
+| `ip_regex` | Default regex pattern to extract IP addresses from log lines | `ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"` |
+| `action` | Default action name to execute when banning | `action = "ipsetblock"` |
+| `unban_action` | Default action name to execute when unbanning | `unban_action = "ipsetunblock"` |
+| `dry_run` | Enable dry run mode (no actions executed) | `dry_run = true` |
+| `verbose` | Enable verbose logging | `verbose = true` |
+| `do_bans` | Enable/disable ban execution | `do_bans = true` |
+| `do_unbans` | Enable/disable automatic unbanning | `do_unbans = true` |
+| `unban_list` | Path to store scheduled unbans | `unban_list = "/var/lib/scanban/unbanlist.toml"` |
+| `include` | Drop-in directory for additional configs | `include = "/etc/scanban.d"` |
 
-### Global
+### Global Settings
 
-A number of variables can be defined at the top level of the config file so that you don't need to
-set them for every single rule.  Each rule can override these in it's own definition.
+Global settings are defined at the top level of the config file and apply to all rules by default. Individual rules can override these settings.
 
 ```toml
+# Operational settings
 dry_run = false
 verbose = false
 do_bans = true
 do_unbans = true
 
-bantime = 1
-threshold = 3
+# Default ban parameters
+bantime = 24        # Ban for 24 hours
+threshold = 3       # Require 3 offenses before banning
 ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"
-action = "blockit"
-unban_action = "unblockit"
+action = "ipsetblock"
+unban_action = "ipsetunblock"
 ```
-
-We can see the default actions to take.  We can also see the default threshold for how many times
-an IP should be seen offending before being banned.  The default bantime is set to 1 hour.
 
 ### Files
 
-This is a list of files to scan and feed to the rules engine.
+Specify which log sources to monitor. scanban supports both regular files and Docker container logs.
 
 ```toml
 files = [
   "/var/log/auth.log",
   "/var/log/ufw.log",
+  "docker://nginx",        # Monitor Docker container logs
+  "docker://mysql"
 ]
 ```
 
-The lines will be delivered to all rules to attempt matching and then banning.
+Each line from these sources is tested against all configured rules. When a line matches a rule's pattern and an IP is extracted, the threshold counter for that IP is incremented.
 
 ### Whitelist
 
-This allows you to ensure certain IPs or networks are never banned.
+Prevent specific IPs or entire networks from ever being banned, even if they match rules. Supports both individual IPs and CIDR notation.
 
 ```toml
 whitelist = [
-  "127.0.0.1",
-  "192.168.1.0/24"
+  "127.0.0.1",           # Localhost
+  "192.168.1.0/24",      # Local network
+  "10.0.0.0/8"           # Private network
 ]
 ```
 
 ### Actions
 
-Actions define a shorthand reference name to use for system commands that will run to ban or unban an IP.  It can 
-be an something like an iptables command or a path your own script.
+Actions define named shell commands to execute when banning or unbanning an IP. These can be iptables/ipset commands, custom scripts, or any shell command.
 
 ```toml
 [actions]
-blockit = "iptables -A INPUT -s $ip -j DROP"
-notify = "pingslack"
-unblockit = "iptables -D INPUT -s $ip -j DROP"
+# iptables-based blocking (not recommended)
+blockit = "iptables -A INPUT -s $ip -j DROP && iptables -A OUTPUT -d $ip -j DROP"
+unblockit = "iptables -D INPUT -s $ip -j DROP && iptables -D OUTPUT -d $ip -j DROP"
+
+# ipset-based blocking (more efficient for many IPs)
 ipsetblock = "ipset add scanban $ip"
 ipsetunblock = "ipset del scanban $ip"
+
+# Custom notification
+notify = "/usr/local/bin/alert-slack.sh"
 ```
 
-The variables in the command like `$ip` will be replaced with the offending IP. The commands will be passed through
-bash like `bash -c "iptables -A INPUT -s 182.23.31.12 -j DROP"`. 
+**Variable Substitution:** Use `$ip` in commands, which will be replaced with the actual IP address. Commands are executed via `bash -c`.
 
-Every command is given environment variables when it is run, so for instance the action `pingslack` has access to
-the following envvars:
+**Environment Variables:** All actions have access to these environment variables:
 
-| Envvar | Description |
+| Variable | Description |
 | --- | --- |
-| SB_IP | The actual offending IP |
-| SB_BANTIME | The length of time to ban for (in hours) |
-| SB_FILENAME | The file that the IP was seen in |
-| SB_LINE | The full line that triggered the ban |
-| SB_NAME | The name of the action (e.g. `notify`) |
-| SB_UNBANACTION | The name of the action to take to unban |
+| `SB_IP` | The offending IP address |
+| `SB_BANTIME` | Ban duration in hours |
+| `SB_FILENAME` | Log file or container where IP was detected |
+| `SB_LINE` | Complete log line that triggered the ban |
+| `SB_NAME` | Name of the action being executed |
+| `SB_UNBANACTION` | Name of the corresponding unban action |
 
 ### Rules
 
-The rules are setup with the array style toml section that uses the double brackets and is based around a pattern or
-set of patterns.  These patterns are used to match against the scanned logged lines.  Any that don't match will be
-ignored while ones that match will be further processed.
+Rules define what patterns to match in log lines and how to handle them. Each rule is defined with `[[rules]]` and can match one or more patterns. When a pattern matches, scanban extracts the IP address and tracks violations.
 
-| Key | Description | Example |
-|---|---|---|
-| pattern | The pattern to match against | `pattern = "Authentication failed"` |
-| patterns | A list of patterns to match against | `patterns = ["Authentication failed", "sshd.*Invalid user \\w+ from"]` |
-| ip_regex | *Optional* The regular expression to match IP addresses | `ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"` |
-| action | *Optional* The action to take when an IP is banned | `action = "blockit"` |
-| unban_action | *Optional* The action to take when an IP is unbanned | `unban_action = "unblockit"` |
-| bantime | *Optional* The length of time to ban for (in hours) | `bantime = 1` |
-| threshold | *Optional* The number of times an IP should be seen offending before being banned | `threshold = 3` |
+**Rule Parameters:**
 
-You can use a single pattern to match against.
+| Key | Required | Description | Example |
+|---|---|---|---|
+| `pattern` | Yes* | Single regex pattern to match | `pattern = "Authentication failed"` |
+| `patterns` | Yes* | Multiple regex patterns (any can match) | `patterns = ["Invalid user", "Failed password"]` |
+| `ip_regex` | No | Custom regex to extract IP (uses global default if omitted) | `ip_regex = "SRC=(\\d+\\.\\d+\\.\\d+\\.\\d+)"` |
+| `action` | No | Override global ban action | `action = "blockit"` |
+| `unban_action` | No | Override global unban action | `unban_action = "unblockit"` |
+| `bantime` | No | Override global ban duration (hours) | `bantime = 48` |
+| `threshold` | No | Override global offense threshold | `threshold = 1` |
 
+*Either `pattern` or `patterns` is required.
+
+**Examples:**
+
+Simple single-pattern rule:
 ```toml
 [[rules]]
 pattern = "Authentication failed"
 ```
 
-You can also use a list of patterns to match against.  So this rule can catch any brute force attempts in auth.log:
-
+Catch multiple SSH brute force patterns:
 ```toml
 [[rules]]
 patterns = [
@@ -189,58 +240,117 @@ patterns = [
   "sshd.*User \\w+ from .* not allowed because not listed in AllowUsers",
   "sshd.*Did not receive identification string from"
 ]
+threshold = 1    # Ban after just one offense
 ```
 
-The top level IP regex pattern is mostly suffice, but if there are more than one IP in the line you can specify a
-regex just for the rule. This rule can detect machines scanning port 138 (eg. potential EternalBlue worm) and block
-them completely on all ports:
-
+Custom IP extraction for firewall logs (when multiple IPs are in the line):
 ```toml
 [[rules]]
 pattern = "IN=\\w+ .*DPT=138"
-ip_regex = " SRC=(\\d+\\.\\d+\\.\\d+\\.\\d+) "
+ip_regex = " SRC=(\\d+\\.\\d+\\.\\d+\\.\\d+) "  # Extract source IP specifically
 ```
 
-## Output
+## Example Output
 
-The output actions are shown in the logs:
+When running in dry run mode, scanban shows what actions would be taken:
 
 ```
-$ scanban -n -f ./auth2.log -c ./scanban.toml -u ./unban.toml
+$ scanban -n -f ./auth2.log -c ./scanban.toml
 2025/06/22 21:45:54 loading config
 2025/06/22 21:45:54 opening unban list
 2025/06/22 21:45:54 selecting scanner strategy
-2025/06/22 21:45:54 buliding line handlers
+2025/06/22 21:45:54 building line handlers
 2025/06/22 21:45:54 built 1 rules
 2025/06/22 21:45:54 built 5 actions
 2025/06/22 21:45:54 starting scanner loop
-2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=216.144.248.30       action=ipsetblock           release=2025-06-23T21:45
-2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=80.94.95.15          action=ipsetblock           release=2025-06-23T21:45
-2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=115.247.46.121       action=ipsetblock           release=2025-06-23T21:45
-2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=216.144.248.25       action=ipsetblock           release=2025-06-23T21:45
-2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=69.162.124.227       action=ipsetblock           release=2025-06-23T21:45
-2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=37.198.207.35        action=ipsetblock           release=2025-06-23T21:45
-2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=69.162.124.235       action=ipsetblock           release=2025-06-23T21:45
-2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=216.144.248.28       action=ipsetblock           release=2025-06-23T21:45
-2025/06/22 21:45:54 actioned=true filename=./auth2.log          ip=80.94.95.15          action=ipsetblock           release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log ip=216.144.248.30 action=ipsetblock release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log ip=80.94.95.15 action=ipsetblock release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log ip=115.247.46.121 action=ipsetblock release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log ip=216.144.248.25 action=ipsetblock release=2025-06-23T21:45
+2025/06/22 21:45:54 actioned=true filename=./auth2.log ip=69.162.124.227 action=ipsetblock release=2025-06-23T21:45
 2025/06/22 21:45:54 10 lines scanned in 0.00 seconds
 2025/06/22 21:45:54 9 actioned, 1 rejected
 2025/06/22 21:45:54 shutting down
 ```
 
-# TODO
+Each ban action shows:
+- **actioned**: Whether the action was taken
+- **filename**: Source log file or container
+- **ip**: Banned IP address
+- **action**: Action executed
+- **release**: When the IP will be unbanned
 
-- [ ] more tests
-- [ ] serve rule triggers via TCP (BYO un/ban tool)
-- [ ] serve rule triggers via UDS (BYO un/ban tool)
+## Complete Example Configuration
+
+```toml
+# /etc/scanban.toml
+
+# Global settings
+do_bans = true
+do_unbans = true
+bantime = 24
+threshold = 3
+ip_regex = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"
+action = "ipsetblock"
+unban_action = "ipsetunblock"
+
+# Log sources
+files = [
+  "/var/log/auth.log",
+  "/var/log/ufw.log",
+  "docker://nginx"
+]
+
+# Never ban these
+whitelist = [
+  "127.0.0.1",
+  "192.168.1.0/24"
+]
+
+# Define actions
+[actions]
+ipsetblock = "ipset add scanban $ip"
+ipsetunblock = "ipset del scanban $ip"
+
+# SSH brute force detection
+[[rules]]
+patterns = [
+  "sshd.*Invalid user \\w+ from",
+  "sshd.*User \\w+ from .* not allowed because not listed in AllowUsers",
+  "sshd.*Did not receive identification string from"
+]
+ip_regex = "from (\\d+\\.\\d+\\.\\d+\\.\\d+)"
+threshold = 1
+
+# Exploit scanner detection (phpMyAdmin, WordPress)
+[[rules]]
+patterns = [
+  "wp-admin",
+  "phpMyAdmin"
+]
+```
+
+## Why scanban instead of fail2ban?
+
+Scanban was created as a modern alternative to fail2ban with these goals:
+
+- **Simpler configuration** - fail2ban's configuration can be verbose and complex
+- **Single binary** - Easy deployment with no Python dependencies
+- **Performance** - Go's efficiency handles high-volume logs well
+- **Docker integration** - Native support for monitoring Docker container logs
+- **Modern codebase** - Easier to modify and extend
+
+## Contributing
+
+Issues and pull requests welcome at https://github.com/penguinpowernz/scanban
+
+## Future Roadmap
+
 - [ ] IPv6 support
-- [ ] add noop action for monitoring only
-
-# Whats wrong with fail2ban?
-
-To me fail2ban feels like legacy software these days. I wanted to make scanban because:
-
-- I find the configuration format of fail2ban finnicky and overly verbose
-- I like to avoid python software where possible
-- I like single compiled binaries
-- I am a golang fanboi
+- [ ] TCP/Unix socket for external ban tools (BYO firewall integration)
+- [ ] No-op action for monitoring without banning
+- [ ] More comprehensive test coverage
+- [x] add a drop in for protecting a ruby on rails app
+- [x] add a drop in for blocking IPs based on tripwires
+- [x] add a drop in for blocking IPs based on bad SSH login attempts
+- [ ] properly handle reverse DNS/PTR records based IPs
