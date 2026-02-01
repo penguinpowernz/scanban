@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/penguinpowernz/scanban/pkg/scan"
@@ -180,7 +181,7 @@ func TestEnvironmentVariableSanitization(t *testing.T) {
 	maliciousLine := "test line\nrm -rf /\x00evil"
 
 	ctx := &scan.Context{
-		IP:          "192.168.1.1",
+		IP:          "192.168.50.1", // Unique IP to avoid cooldown from other tests
 		Action:      "test",
 		DryRun:      false,
 		Line:        maliciousLine,
@@ -193,4 +194,87 @@ func TestEnvironmentVariableSanitization(t *testing.T) {
 	err := action.execute(ctx)
 	assert.NoError(t, err)
 	// The malicious newline and null byte should have been removed by sanitization
+}
+
+// TestRateLimitingDuplicateIPs verifies that duplicate IPs don't consume tokens
+func TestRateLimitingDuplicateIPs(t *testing.T) {
+	action := &Action{
+		name:    "test",
+		command: "true",
+	}
+
+	ip := "192.168.60.1" // Unique IP to avoid conflicts with other tests
+
+	// First action should succeed
+	ctx1 := &scan.Context{
+		IP:          ip,
+		Action:      "test",
+		DryRun:      false,
+		Line:        "test",
+		Filename:    "/var/log/test.log",
+		UnbanAction: "test",
+		BanTime:     24,
+	}
+
+	err := action.execute(ctx1)
+	assert.NoError(t, err, "First action should succeed")
+
+	// Immediate retry of same IP should fail (cooldown)
+	ctx2 := &scan.Context{
+		IP:          ip,
+		Action:      "test",
+		DryRun:      false,
+		Line:        "test",
+		Filename:    "/var/log/test.log",
+		UnbanAction: "test",
+		BanTime:     24,
+	}
+
+	err = action.execute(ctx2)
+	assert.Error(t, err, "Duplicate IP should be rejected by cooldown")
+	assert.Contains(t, err.Error(), "already actioned recently")
+}
+
+// TestRateLimitingGlobalLimit verifies global rate limiting works
+func TestRateLimitingGlobalLimit(t *testing.T) {
+	action := &Action{
+		name:    "test",
+		command: "true",
+	}
+
+	// Try to execute more than burst capacity unique IPs
+	allowed := 0
+	rateLimited := 0
+	otherErrors := 0
+
+	for i := 100; i <= 120; i++ {
+		ip := fmt.Sprintf("10.0.0.%d", i)
+		ctx := &scan.Context{
+			IP:          ip,
+			Action:      "test",
+			DryRun:      false,
+			Line:        "test",
+			Filename:    "/var/log/test.log",
+			UnbanAction: "test",
+			BanTime:     24,
+		}
+
+		err := action.execute(ctx)
+		if err == nil {
+			allowed++
+		} else if err != nil {
+			errMsg := err.Error()
+			if len(errMsg) >= 18 && errMsg[:18] == "global rate limit " {
+				rateLimited++
+			} else {
+				otherErrors++
+			}
+		}
+	}
+
+	// Should have some actions allowed and some rate limited
+	assert.Greater(t, allowed, 0, "Should allow some actions")
+	assert.Greater(t, rateLimited, 0, "Should rate limit some actions when burst is exceeded")
+	assert.Equal(t, 0, otherErrors, "Should have no other errors")
+	assert.Equal(t, 21, allowed+rateLimited, "Total should be 21 attempts")
 }

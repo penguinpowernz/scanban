@@ -4,13 +4,21 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/penguinpowernz/scanban/pkg/ratelimit"
 	"github.com/penguinpowernz/scanban/pkg/sanitize"
 	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
 var (
 	doBans = true
+
+	// Global rate limiter: 60 actions/minute sustained, burst of 10
+	globalLimiter = ratelimit.New(60, 10)
+
+	// Per-IP cooldown: prevent re-banning same IP within 1 hour
+	ipCooldown = ratelimit.NewCooldown(1 * time.Hour)
 )
 
 // Action represents a single action that may
@@ -45,14 +53,25 @@ func (a *Action) Handle(c *scan.Context) {
 }
 
 func (a *Action) execute(c *scan.Context) error {
+	// Sanitize IP to prevent command injection (always validate, even in dry run)
+	safeIP := sanitize.IP(c.IP)
+	if safeIP == "" {
+		return fmt.Errorf("invalid or dangerous IP address: %s", c.IP)
+	}
+
+	// In dry run mode, skip rate limiting and actual execution
 	if c.DryRun {
 		return nil
 	}
 
-	// Sanitize IP to prevent command injection
-	safeIP := sanitize.IP(c.IP)
-	if safeIP == "" {
-		return fmt.Errorf("invalid or dangerous IP address: %s", c.IP)
+	// Check per-IP cooldown first (doesn't consume tokens)
+	if !ipCooldown.Allow(safeIP) {
+		return fmt.Errorf("IP %s already actioned recently, skipping", safeIP)
+	}
+
+	// Check global rate limit (consumes token)
+	if !globalLimiter.Allow() {
+		return fmt.Errorf("global rate limit exceeded, action dropped for IP %s", safeIP)
 	}
 
 	cmdstring := strings.ReplaceAll(a.command, "$ip", safeIP)
@@ -64,7 +83,15 @@ func (a *Action) execute(c *scan.Context) error {
 	cmd.Env = append(cmd.Env, "SB_LINE="+sanitize.EnvVar(c.Line))
 	// cmd.Env = append(cmd.Env, "SB_NAME="+c.Name)
 	cmd.Env = append(cmd.Env, "SB_UNBANACTION="+sanitize.EnvVar(c.UnbanAction))
-	return cmd.Run()
+
+	err := cmd.Run()
+
+	// Record the IP in cooldown tracker only if action succeeded
+	if err == nil {
+		ipCooldown.Record(safeIP)
+	}
+
+	return err
 }
 
 type Actions []*Action

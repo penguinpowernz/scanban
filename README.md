@@ -19,6 +19,7 @@ assuming that if they are scanning for one exploit, they may scan for others.
 - **Dry run mode** - Test your configuration without taking any action
 - **Drop-in configuration** - Modular config files in `/etc/scanban.d/`
 - **Works great with ipset** - Efficient IP blocking for high-volume scenarios
+- **Security hardened** - Built-in protection against log injection attacks and rate limiting to prevent resource exhaustion
 
 ## Quickstart
 
@@ -330,6 +331,39 @@ patterns = [
 ]
 ```
 
+## Security Features
+
+Scanban includes several built-in security protections that go beyond traditional fail2ban deployments:
+
+### Input Sanitization
+
+All IP addresses and log data are validated and sanitized before being used in shell commands to prevent log injection attacks:
+
+- **IP validation**: Only valid IPv4/IPv6 addresses are accepted; dangerous characters like `;`, `|`, `$()`, backticks are rejected
+- **Environment variable sanitization**: Control characters (null bytes, newlines, etc.) are stripped from log lines before being passed to actions
+- **Regex pattern validation**: Dangerous regex patterns that could cause ReDoS (Regular Expression Denial of Service) are detected and rejected at startup
+
+This prevents attackers from crafting malicious log entries that could execute arbitrary commands:
+```
+# This malicious log entry would be blocked:
+Feb  2 12:34:56 host sshd[1234]: Failed password for root from 192.168.1.1; rm -rf /
+```
+
+### Rate Limiting
+
+Scanban protects itself from being weaponized as a DoS vector through hybrid rate limiting:
+
+- **Global rate limit**: Maximum of 60 ban actions per minute (burst of 10) to prevent resource exhaustion
+- **Per-IP cooldown**: Once an IP is banned, it cannot be re-banned for 1 hour (prevents wasted actions)
+- **No configuration needed**: Sensible hardcoded defaults protect your system immediately
+
+**Attack scenarios prevented:**
+- **IP spam**: Attacker floods logs with 10,000 random IPs → Only first 10 banned immediately, then throttled to 60/min
+- **Duplicate spam**: Same IP appears 10,000 times in logs → Banned once, remaining 9,999 ignored (no resource cost)
+- **System stability**: Even under attack, scanban won't spawn thousands of iptables processes or crash from memory exhaustion
+
+**Dry run exemption:** Rate limiting is automatically bypassed in dry run mode (`-n` flag) so you can see all potential bans when testing configurations.
+
 ## Why scanban instead of fail2ban?
 
 Scanban was created as a modern alternative to fail2ban with these goals:
@@ -339,6 +373,7 @@ Scanban was created as a modern alternative to fail2ban with these goals:
 - **Performance** - Go's efficiency handles high-volume logs well
 - **Docker integration** - Native support for monitoring Docker container logs
 - **Modern codebase** - Easier to modify and extend
+- **Security hardened** - Built-in input sanitization and rate limiting (features not present in default fail2ban)
 
 ## Contributing
 
@@ -355,4 +390,4 @@ Issues and pull requests welcome at https://github.com/penguinpowernz/scanban
 - [x] add a drop in for blocking IPs based on bad SSH login attempts
 - [ ] properly handle reverse DNS/PTR records based IPs
 - [x] protect against log injection attacks
-- [ ] rate limit action execution
+- [x] rate limit action execution
