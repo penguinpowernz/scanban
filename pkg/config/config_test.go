@@ -109,6 +109,52 @@ func TestRulePtnRegex(t *testing.T) {
 	assert.True(t, matches)
 }
 
+func TestRuleConfigString(t *testing.T) {
+	tests := []struct {
+		name string
+		rule *RuleConfig
+		want string
+	}{
+		{
+			name: "uses desc if provided",
+			rule: &RuleConfig{Desc: "SSH Bruteforce Attack"},
+			want: "ssh_bruteforce_attack",
+		},
+		{
+			name: "uses pattern if no desc",
+			rule: &RuleConfig{Pattern: "Failed password for"},
+			want: "failed_password_for",
+		},
+		{
+			name: "uses first pattern from patterns if no desc or pattern",
+			rule: &RuleConfig{Patterns: []string{"wp-admin", "phpMyAdmin"}},
+			want: "wp_admin",
+		},
+		{
+			name: "returns unnamed_rule if nothing provided",
+			rule: &RuleConfig{},
+			want: "unnamed_rule",
+		},
+		{
+			name: "sanitizes special characters",
+			rule: &RuleConfig{Desc: "Test-Rule_With/Special\\Chars!"},
+			want: "test_rulewithspecialchars",
+		},
+		{
+			name: "handles regex patterns",
+			rule: &RuleConfig{Pattern: "sshd.*Invalid user \\w+ from"},
+			want: "sshdinvalid_user_w_from",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.rule.String()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 var cfgData2 = `
 files = ["/var/log/kern.log"]
 

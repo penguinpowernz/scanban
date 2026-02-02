@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/penguinpowernz/scanban/pkg/actions"
 	"github.com/penguinpowernz/scanban/pkg/config"
@@ -30,6 +31,7 @@ var (
 	dumpCfg   bool
 	testCfg   bool
 	filename  string
+	stateFile string
 )
 
 func main() {
@@ -42,6 +44,7 @@ func main() {
 	flag.BoolVar(&verbose, "v", false, "verbose")
 	flag.BoolVar(&dumpCfg, "x", false, "dump complete merged config")
 	flag.BoolVar(&testCfg, "t", false, "test complete merged config")
+	flag.StringVar(&stateFile, "s", "/var/run/scanban.state", "state file path for metrics")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -107,6 +110,9 @@ func main() {
 	elogger := logit.Errors(verbose)
 
 	log.Println("starting scanner loop")
+
+	// Start metrics writer goroutine (writes state file every 5 seconds)
+	go metrics.StartWriter(ctx, stateFile, 5*time.Second)
 
 	// start all the scanners and listen for line contexts
 	for line := range scanners.Scan(ctx) {

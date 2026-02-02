@@ -14,6 +14,7 @@ type Rule struct {
 	UnbanAction string
 	BanTime     int
 	Threshold   int
+	Label       string // Human-readable label for metrics
 	ipre        *regexp.Regexp
 	ptns        []*regexp.Regexp
 }
@@ -43,6 +44,7 @@ func (r *Rule) Handle(c *scan.Context) {
 	c.UnbanAction = r.UnbanAction
 	c.BanTime = r.BanTime
 	c.Threshold = r.Threshold
+	c.RuleName = r.Label
 }
 
 func newRule(cfg *config.RuleConfig) *Rule {
@@ -71,6 +73,7 @@ func newRule(cfg *config.RuleConfig) *Rule {
 		UnbanAction: cfg.UnbanAction,
 		BanTime:     cfg.Bantime,
 		Threshold:   cfg.Threshold,
+		Label:       cfg.String(), // Use String() method for label
 		ipre:        regexp.MustCompile(cfg.IpRegex),
 		ptns: func() []*regexp.Regexp {
 			var ptns []*regexp.Regexp

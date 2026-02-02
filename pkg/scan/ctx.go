@@ -18,6 +18,7 @@ type Context struct {
 	Matched        bool      `json:"matched"`
 	Match          string    `json:"match"`
 	Line           string    `json:"line"`
+	RuleName       string    `json:"rule_name"`
 	Started        time.Time `json:"started"`
 	DryRun         bool
 	err            error
@@ -34,6 +35,11 @@ func (c *Context) Err(s string) {
 // OK returns true if the context has an action, i.e. a rule matched or threshold hit
 func (c *Context) OK() bool {
 	return c.err == nil
+}
+
+// GetError returns the error if any, or nil
+func (c *Context) GetError() error {
+	return c.err
 }
 
 // ReleaseTime returns the release time of the ban

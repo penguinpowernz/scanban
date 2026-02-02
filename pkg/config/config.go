@@ -174,3 +174,52 @@ func (r *RuleConfig) Compile(cfg *Config) {
 		r.Patterns = append(r.Patterns, r.Pattern)
 	}
 }
+
+// String returns a human-readable label for the rule
+// Priority: desc > pattern > first pattern from patterns > "unnamed_rule"
+func (r *RuleConfig) String() string {
+	// Use desc if provided
+	if r.Desc != "" {
+		return sanitizeLabel(r.Desc)
+	}
+
+	// Use single pattern if available
+	if r.Pattern != "" {
+		return sanitizeLabel(truncate(r.Pattern, 50))
+	}
+
+	// Use first pattern from patterns array
+	if len(r.Patterns) > 0 {
+		return sanitizeLabel(truncate(r.Patterns[0], 50))
+	}
+
+	return "unnamed_rule"
+}
+
+// sanitizeLabel converts a string into a safe metric label
+// Replaces spaces with underscores, removes special chars, lowercase
+func sanitizeLabel(s string) string {
+	var result strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			result.WriteRune(r)
+		} else if r == ' ' || r == '-' {
+			result.WriteRune('_')
+		}
+		// Skip other special characters
+	}
+	label := result.String()
+	// Remove consecutive underscores
+	for strings.Contains(label, "__") {
+		label = strings.ReplaceAll(label, "__", "_")
+	}
+	return strings.Trim(label, "_")
+}
+
+// truncate truncates a string to maxLen characters
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen]
+}

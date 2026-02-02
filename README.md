@@ -83,6 +83,8 @@ Usage of scanban:
   -f string
         specific file to scan
   -n    dry run (show what would happen without taking action)
+  -s string
+        state file path for metrics (default "/var/run/scanban.state")
   -t    test complete merged config
   -u string
         unbanlist file (default "/var/lib/scanban/unbanlist.toml")
@@ -363,6 +365,142 @@ Scanban protects itself from being weaponized as a DoS vector through hybrid rat
 - **System stability**: Even under attack, scanban won't spawn thousands of iptables processes or crash from memory exhaustion
 
 **Dry run exemption:** Rate limiting is automatically bypassed in dry run mode (`-n` flag) so you can see all potential bans when testing configurations.
+
+## Metrics and Monitoring
+
+Scanban automatically tracks comprehensive runtime statistics and writes them to a state file every 5 seconds. This provides real-time visibility into what's happening on your system.
+
+### State File Location
+
+By default, metrics are written to `/var/run/scanban.state` in YAML format. You can customize the location:
+
+```bash
+scanban -s /var/run/scanban.state      # Default
+scanban -s /tmp/scanban-metrics.yaml   # Custom location (useful for non-root)
+```
+
+### Metrics Tracked
+
+**Overall Statistics:**
+- Total lines scanned and processing rate (lines/second)
+- Total bans executed
+- Unique IPs seen vs. banned
+- Uptime
+
+**Per-File Breakdown:**
+- Lines, matches, bans, and errors for each log file/container
+- Identify which logs are noisiest
+
+**Per-Rule Effectiveness:**
+- Matches and bans for each rule
+- Automatically labeled using rule descriptions or patterns
+- Tune your rules based on real data
+
+**Action Execution:**
+- Count of each action type executed
+- Track notification delivery, firewall updates, etc.
+
+**Error Categorization:**
+- Whitelisted IPs
+- Invalid IPs caught by sanitization
+- Rate limiting (cooldown vs. global)
+- Threshold not met
+- Failed actions
+
+**Rate Limiting Stats:**
+- How many IPs were blocked by per-IP cooldown
+- How many actions were throttled by global rate limit
+- Indicates if you're under attack
+
+**Top Banned IPs:**
+- Top 10 most frequently banned IPs
+- Identify persistent attackers
+
+### Example State File
+
+```yaml
+updated_at: 2026-02-02T15:30:45Z
+uptime_seconds: 3600.5
+lines_total: 45230
+lines_per_second: 12.56
+bans_total: 127
+unique_ips_seen: 1523
+unique_ips_banned: 89
+
+files:
+  /var/log/auth.log:
+    lines: 30120
+    matches: 95
+    bans: 78
+    errors: 2
+  docker://nginx:
+    lines: 15110
+    matches: 49
+    bans: 49
+    errors: 0
+
+rules:
+  ssh_bruteforce:
+    matches: 120
+    bans: 102
+  wp_admin:
+    matches: 24
+    bans: 24
+
+actions:
+  ipsetblock: 115
+  notify: 12
+
+errors:
+  whitelisted: 12
+  invalid_ip: 0
+  rate_limited_cooldown: 38
+  rate_limited_global: 15
+  threshold_not_met: 45
+  no_match: 5432
+
+rate_limiting:
+  cooldown_blocked: 38
+  global_blocked: 15
+
+top_banned_ips:
+  - ip: 192.168.1.100
+    count: 5
+  - ip: 10.0.0.50
+    count: 3
+```
+
+### Rule Labeling
+
+Rules are automatically labeled for metrics using the first available:
+1. **desc field** (if provided): `desc = "SSH Bruteforce"` → `ssh_bruteforce`
+2. **pattern field**: `pattern = "Failed password"` → `failed_password`
+3. **First pattern from patterns array**: `patterns = ["wp-admin"]` → `wp_admin`
+4. **Fallback**: `unnamed_rule`
+
+Labels are sanitized (lowercase, alphanumeric + underscores) for use as metric keys.
+
+### Monitoring Integration
+
+The state file can be easily integrated with monitoring systems:
+
+**Prometheus/Node Exporter:**
+```bash
+# Use a textfile collector to expose metrics
+*/5 * * * * /usr/local/bin/scanban-to-prometheus.sh
+```
+
+**Grafana/InfluxDB:**
+Parse the YAML and send metrics via HTTP API
+
+**Simple monitoring:**
+```bash
+# Check if under attack (high rate limiting)
+watch -n 5 'yq .rate_limiting.global_blocked /var/run/scanban.state'
+
+# Monitor specific log file
+yq '.files."/var/log/auth.log"' /var/run/scanban.state
+```
 
 ## Why scanban instead of fail2ban?
 
