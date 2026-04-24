@@ -6,10 +6,11 @@ import (
 	"os"
 )
 
-func FromFile(filename string, dryRun bool) Scanners {
+func FromFile(filename string, dryRun bool, engine Handler) Scanners {
 	return Scanners{
 		&Scanner{
 			Filename: filename,
+			engine:   engine,
 			tail:     scanFile(filename),
 			dryRun:   dryRun,
 		},

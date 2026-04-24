@@ -59,10 +59,6 @@ func main() {
 	overwriteConfigWithFlags(cfg)
 	cfg.MergeDropin(dropInDir)
 
-	// if err := cfg.Validate(); err != nil {
-	// 	log.Fatal(err)
-	// }
-
 	if testCfg {
 		return
 	}
@@ -80,55 +76,63 @@ func main() {
 	}
 
 	if !dryRun && cfg.DoUnbans {
-		// start the unban loop
 		log.Println("starting unban loop")
 		go unban.Loop(ctx, ublist)
 	}
 
 	log.Println("selecting scanner strategy")
+
+	// engineFor builds a per-file rule engine from a FileConfig's compiled rules.
+	engineFor := func(fc *config.FileConfig) scan.Handler {
+		ruls := rules.BuildRules(fc.CompiledRules)
+		log.Printf("built %d rules for %s", len(ruls), fc.Path)
+		return rules.NewEngine(ruls)
+	}
+
+	// globalEngine collects all rules across all files for use with -f / stdin.
+	globalEngine := func() scan.Handler {
+		var allRules []*config.RuleConfig
+		for _, fc := range cfg.Files {
+			allRules = append(allRules, fc.CompiledRules...)
+		}
+		ruls := rules.BuildRules(allRules)
+		log.Printf("built %d rules (global)", len(ruls))
+		return rules.NewEngine(ruls)
+	}()
+
 	var scanners scan.Scanners
 	switch {
 	case filename == "-":
-		scanners = scan.FromStdin(dryRun)
+		scanners = scan.FromStdin(dryRun, globalEngine)
 	case filename != "":
-		scanners = scan.FromFile(filename, dryRun)
+		scanners = scan.FromFile(filename, dryRun, globalEngine)
 	default:
-		scanners = scan.BuildScanners(cfg.Files, dryRun)
+		scanners = scan.BuildScanners(cfg.Files, dryRun, engineFor)
 	}
 
-	log.Println("buliding line handlers")
+	log.Println("building line handlers")
 	wl := whitelist.New(cfg.Whitelist)
-	ruls := rules.BuildRules(cfg.Rules)
-	log.Println("built", len(ruls), "rules")
-	eng := rules.NewEngine(ruls)
 	thresholds := threshold.New()
 	actor := actions.BuildActions(cfg.Actions, cfg.DoBans)
 	log.Println("built", len(actor), "actions")
-	// tcp := byo.NewTCP(bind)
-	// uds := byo.NewUDS(udsfile)
 	logger := logit.New()
 	elogger := logit.Errors(verbose)
 
 	log.Println("starting scanner loop")
 
-	// Start metrics writer goroutine (writes state file every 5 seconds)
+	// Start metrics writer goroutine
 	go metrics.StartWriter(ctx, stateFile, 5*time.Second)
 
-	// start all the scanners and listen for line contexts
 	for line := range scanners.Scan(ctx) {
-		// log.Println("got line", line.Line)
-		// bailout.Handle(line)
-		once.Handle(line)       // ensure to process each line only once
-		eng.Handle(line)        // run the line through the rule engine
-		wl.Handle(line)         // ignore the line if the IP is in the whitelist
-		thresholds.Handle(line) // run the line through the threshold checker
-		actor.Handle(line)      // run the actions for any lines that match
-		ublist.Handle(line)     // add the unban actions
-		logger.Handle(line)     // log the action taken (if any) for the line
+		once.Handle(line)        // ensure each line is processed only once
+		line.Engine.Handle(line) // run the per-file rule engine
+		wl.Handle(line)          // ignore whitelisted IPs
+		thresholds.Handle(line)  // check offense threshold
+		actor.Handle(line)       // execute ban actions
+		ublist.Handle(line)      // schedule unban
+		logger.Handle(line)      // log the action taken
 		elogger.Handle(line)
 		metrics.Handle(line)
-		// uds.Handle(line)
-		// tcp.Handle(line)
 	}
 
 	metrics.Done()
@@ -139,7 +143,7 @@ func main() {
 	<-ctx.Done()
 }
 
-// overwriteConfigWithFlags overwrites the loaded config file, with the CLI flags
+// overwriteConfigWithFlags overwrites the loaded config file with CLI flags
 func overwriteConfigWithFlags(cfg *config.Config) {
 	if cfg.Include != "" && dropInDir == "" {
 		dropInDir = cfg.Include
@@ -164,5 +168,4 @@ func overwriteConfigWithFlags(cfg *config.Config) {
 	if cfg.DryRun {
 		dryRun = true
 	}
-
 }

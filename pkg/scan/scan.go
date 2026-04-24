@@ -4,27 +4,30 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/penguinpowernz/scanban/pkg/config"
 )
 
-func BuildScanners(files []string, dryRun bool) Scanners {
+func BuildScanners(files []*config.FileConfig, dryRun bool, engineFor func(*config.FileConfig) Handler) Scanners {
 	s := &Scanners{}
-	for _, file := range files {
-		t, err := NewTailerFromFileConfig(file)
+	for _, fc := range files {
+		t, err := NewTailerFromFileConfig(fc.Path)
 		if err != nil {
 			continue
 		}
 		*s = append(*s, &Scanner{
-			Filename: file,
+			Filename: fc.Path,
+			engine:   engineFor(fc),
 			tail:     t.Tail,
 			dryRun:   dryRun,
 		})
 	}
-
 	return *s
 }
 
 type Scanner struct {
 	Filename string
+	engine   Handler // rule engine scoped to this file source
 	tail     func(context.Context, chan string)
 	dryRun   bool
 }
@@ -41,7 +44,6 @@ func (s *Scanners) Scan(ctx context.Context) <-chan *Context {
 			defer wg.Done()
 			lines := make(chan string)
 			go s.tail(ctx, lines)
-			// defer log.Println("scanner for", s.Filename, "exited")
 
 			for {
 				select {
@@ -49,7 +51,6 @@ func (s *Scanners) Scan(ctx context.Context) <-chan *Context {
 					return
 				case l, ok := <-lines:
 					if !ok {
-						// log.Println("scanner for", s.Filename, "closed channel")
 						return
 					}
 					ch <- &Context{
@@ -57,6 +58,7 @@ func (s *Scanners) Scan(ctx context.Context) <-chan *Context {
 						Line:     l,
 						DryRun:   s.dryRun,
 						Started:  time.Now(),
+						Engine:   s.engine,
 					}
 				}
 			}

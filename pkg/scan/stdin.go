@@ -6,10 +6,11 @@ import (
 	"os"
 )
 
-func FromStdin(dryRun bool) Scanners {
+func FromStdin(dryRun bool, engine Handler) Scanners {
 	return Scanners{
 		&Scanner{
 			Filename: "stdin",
+			engine:   engine,
 			tail:     scanStdin,
 			dryRun:   dryRun,
 		},

@@ -1,21 +1,15 @@
-# setup tripwires with iptables logging, to see if any machine tries to access specfic ports.
-#  This should catch worms trying to expliot the EternalBlue vulnerability for instance.
-#    iptables -A INPUT -i tun0 -p tcp --dport 445 -j LOG --log-prefix "tripwire "
-#    iptables -A INPUT -i tun0 -p tcp --dport 138 -j LOG --log-prefix "tripwire "
+# Setup iptables tripwires so scanban can catch worms probing specific ports
+# (e.g. EternalBlue on 445, telnet on 23). Add the LOG rules first:
+#
+#   iptables -A INPUT -i tun0 -p tcp --dport 445 -j LOG --log-prefix "tripwire "
+#   iptables -A INPUT -i tun0 -p tcp --dport 138 -j LOG --log-prefix "tripwire "
 
-# [[files]]
-# path = "/var/log/kern.log"
-# action = "ipsetblock"
-# ip_regex = "SRC=(\\d+.\\d+.\\d+.\\d+)"
-# rules = [
-#
-# you could block only specific port trips:
-#   { pattern = "tripwire .* DPT=23 ", name = "attempt to access telnet" },
-#   { pattern = "tripwire .* DPT=21 " },
-#   { pattern = "tripwire .* DPT=25 " },
-#   { pattern = "tripwire .* DPT=3389 " }
-#
-# realisticly you could just use this:
-#   { pattern = "tripwire .* " }
-#
-# ]
+[rules.tripwire]
+# Ban any IP that hits a tripwire port. Narrow to specific ports by replacing
+# the pattern below with e.g. "tripwire .* DPT=445 ".
+patterns = ["tripwire "]
+ip_regex = 'SRC=(\d+\.\d+\.\d+\.\d+)'
+
+[[files]]
+path = "/var/log/kern.log"
+rules = ["tripwire"]

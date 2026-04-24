@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -16,6 +17,8 @@ func New() *Config {
 	cfg.DoUnbans = true
 	cfg.UnbanList = "/var/lib/unscanban.toml"
 	cfg.Include = "/etc/scanban.d"
+	cfg.Rules = make(map[string]*RuleConfig)
+	cfg.Actions = make(map[string]string)
 	return cfg
 }
 
@@ -44,13 +47,13 @@ func Decode(data []byte) (*Config, error) {
 type Config struct {
 	Whitelist   []string          `toml:"whitelist"`
 	Actions     map[string]string `toml:"actions"`
-	Files       []string          `toml:"files"`
+	Files       []*FileConfig     `toml:"files"`
 	Bantime     int               `toml:"bantime"`
 	IpRegex     string            `toml:"ip_regex"`
 	UnbanAction string            `toml:"unban_action"`
 	Action      string            `toml:"action"`
 	Threshold   int               `toml:"threshold"`
-	Rules       []*RuleConfig     `toml:"rules"`
+	Rules       map[string]*RuleConfig `toml:"rules"`
 
 	DryRun    bool   `toml:"dry_run"`
 	Verbose   bool   `toml:"verbose"`
@@ -58,17 +61,79 @@ type Config struct {
 	DoUnbans  bool   `toml:"do_unbans"`
 	UnbanList string `toml:"unban_list"`
 
-	// ByoTCP string `toml:"byo_tcp"`
-	// ByoUDS string `toml:"byo_uds"`
-
 	Include string `toml:"include"`
 }
 
+// FileConfig represents a single log source with its own rules and settings.
+// Settings left at zero/empty inherit from the global Config defaults.
+type FileConfig struct {
+	Path        string   `toml:"path"`
+	IpRegex     string   `toml:"ip_regex,omitempty"`
+	Action      string   `toml:"action,omitempty"`
+	UnbanAction string   `toml:"unban_action,omitempty"`
+	Bantime     int      `toml:"bantime,omitempty"`
+	Threshold   int      `toml:"threshold,omitempty"`
+	Rules       []string `toml:"rules"` // names referencing [rules.name] entries
+
+	// CompiledRules is populated by Compile() — not parsed from TOML.
+	CompiledRules []*RuleConfig `toml:"-"`
+}
+
+// Compile resolves rule name references and applies three-tier inheritance:
+// global defaults → file-level overrides → per-rule overrides.
+func (f *FileConfig) Compile(cfg *Config) error {
+	// Apply global defaults to file-level fields
+	if f.IpRegex == "" {
+		f.IpRegex = cfg.IpRegex
+	}
+	if f.Action == "" {
+		f.Action = cfg.Action
+	}
+	if f.UnbanAction == "" {
+		f.UnbanAction = cfg.UnbanAction
+	}
+	if f.Bantime == 0 {
+		f.Bantime = cfg.Bantime
+	}
+	if f.Threshold == 0 {
+		f.Threshold = cfg.Threshold
+	}
+
+	// Resolve named rules
+	for _, name := range f.Rules {
+		rc, ok := cfg.Rules[name]
+		if !ok {
+			return fmt.Errorf("file %q references unknown rule %q", f.Path, name)
+		}
+		// Clone the rule config so per-file inheritance doesn't mutate the global map
+		compiled := *rc
+		// Apply file-level settings as fallback for unset rule fields
+		if compiled.IpRegex == "" {
+			compiled.IpRegex = f.IpRegex
+		}
+		if compiled.Action == "" {
+			compiled.Action = f.Action
+		}
+		if compiled.UnbanAction == "" {
+			compiled.UnbanAction = f.UnbanAction
+		}
+		if compiled.Bantime == 0 {
+			compiled.Bantime = f.Bantime
+		}
+		if compiled.Threshold == 0 {
+			compiled.Threshold = f.Threshold
+		}
+		// Normalise single pattern into patterns slice
+		if compiled.Pattern != "" {
+			compiled.Patterns = append(compiled.Patterns, compiled.Pattern)
+		}
+		f.CompiledRules = append(f.CompiledRules, &compiled)
+	}
+
+	return nil
+}
+
 func (c *Config) Validate() error {
-	// TODO: check all rule actions are valid and exist
-
-	// TODO: check all IPs in the whitelist are valid
-
 	return nil
 }
 
@@ -77,8 +142,15 @@ func (c *Config) Encode(w io.Writer) error {
 }
 
 func (c *Config) Compile() {
+	// First compile named rules against global defaults so their own
+	// unset fields are filled in before FileConfig.Compile clones them.
 	for _, rule := range c.Rules {
-		rule.Compile(c)
+		rule.compileGlobals(c)
+	}
+	for _, f := range c.Files {
+		if err := f.Compile(c); err != nil {
+			log.Println("WARNING:", err)
+		}
 	}
 }
 
@@ -100,15 +172,16 @@ func (c *Config) MergeDropin(dir string) {
 			return nil
 		})
 
-		// ensure the files to scan are unique
-		files := make(map[string]bool)
+		// Deduplicate files by path
+		seen := make(map[string]bool)
+		unique := make([]*FileConfig, 0, len(c.Files))
 		for _, f := range c.Files {
-			files[f] = true
+			if !seen[f.Path] {
+				seen[f.Path] = true
+				unique = append(unique, f)
+			}
 		}
-		c.Files = make([]string, 0, len(files))
-		for f := range files {
-			c.Files = append(c.Files, f)
-		}
+		c.Files = unique
 	}
 }
 
@@ -122,6 +195,9 @@ func (c *Config) Merge(cfg *Config) {
 		c.Actions[k] = v
 	}
 	c.Files = append(c.Files, cfg.Files...)
+	for k, v := range cfg.Rules {
+		c.Rules[k] = v
+	}
 }
 
 // MergeFile reads the given file and merges it into the config
@@ -139,22 +215,22 @@ func (c *Config) MergeFile(filename string) error {
 	return nil
 }
 
-// RuleConfig is the config for a specific rule
+// RuleConfig is the config for a specific named rule
 type RuleConfig struct {
 	IpRegex     string `toml:"ip_regex,omitempty"`
 	Action      string `toml:"action,omitempty"`
-	Pattern     string `toml:"pattern"`
-	Desc        string `toml:"desc"`
+	Pattern     string `toml:"pattern,omitempty"`
+	Desc        string `toml:"desc,omitempty"`
 	Threshold   int    `toml:"threshold,omitempty"`
-	Bantime     int    `toml:"bantime"`
-	UnbanAction string `toml:"unban_action"`
+	Bantime     int    `toml:"bantime,omitempty"`
+	UnbanAction string `toml:"unban_action,omitempty"`
 
-	Patterns []string `toml:"patterns"`
+	Patterns []string `toml:"patterns,omitempty"`
 }
 
-// Compile ensures all fields are set by copying any that
-// are not from the global settings in top level
-func (r *RuleConfig) Compile(cfg *Config) {
+// compileGlobals fills in unset rule fields from global config defaults.
+// Called before FileConfig.Compile so clones already have global defaults.
+func (r *RuleConfig) compileGlobals(cfg *Config) {
 	if r.IpRegex == "" {
 		r.IpRegex = cfg.IpRegex
 	}
@@ -170,34 +246,24 @@ func (r *RuleConfig) Compile(cfg *Config) {
 	if r.Threshold == 0 {
 		r.Threshold = cfg.Threshold
 	}
-	if r.Pattern != "" {
-		r.Patterns = append(r.Patterns, r.Pattern)
-	}
 }
 
-// String returns a human-readable label for the rule
+// String returns a human-readable label for the rule.
 // Priority: desc > pattern > first pattern from patterns > "unnamed_rule"
 func (r *RuleConfig) String() string {
-	// Use desc if provided
 	if r.Desc != "" {
 		return sanitizeLabel(r.Desc)
 	}
-
-	// Use single pattern if available
 	if r.Pattern != "" {
 		return sanitizeLabel(truncate(r.Pattern, 50))
 	}
-
-	// Use first pattern from patterns array
 	if len(r.Patterns) > 0 {
 		return sanitizeLabel(truncate(r.Patterns[0], 50))
 	}
-
 	return "unnamed_rule"
 }
 
 // sanitizeLabel converts a string into a safe metric label
-// Replaces spaces with underscores, removes special chars, lowercase
 func sanitizeLabel(s string) string {
 	var result strings.Builder
 	for _, r := range strings.ToLower(s) {
@@ -206,10 +272,8 @@ func sanitizeLabel(s string) string {
 		} else if r == ' ' || r == '-' {
 			result.WriteRune('_')
 		}
-		// Skip other special characters
 	}
 	label := result.String()
-	// Remove consecutive underscores
 	for strings.Contains(label, "__") {
 		label = strings.ReplaceAll(label, "__", "_")
 	}

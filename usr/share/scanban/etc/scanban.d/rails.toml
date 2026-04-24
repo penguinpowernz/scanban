@@ -1,29 +1,29 @@
-# this is for a rails app, like why the rails app needs to try process php scripts...?  Save
-# your resources by not scanning these things, let alone for security.
+# Ban IPs that probe a Rails app for PHP scripts, admin panels, and common
+# exploit paths — things a Rails app should never serve.
 
-# [[files]]
-# path = "/opt/railsapp/log/production.log"
-# ip_regex = 'for (\d+\.\d+\.\d+\.\d+) at'
-# action = "ipsetblock"
-# unban_action = "ipsetunblock"
-# rules = [
-#   { pattern = '\.php" for', desc = "php_script"},
-#   { pattern = '\.pl" for', desc = "perl_script"},
-#   { pattern = '\.aspx" for', desc = "aspx_script"},
-#   { pattern = '\.cgi" for', desc = "cgi_script"},
-#   { pattern = "XDEBUG_SESSION_START=phpstorm", desc = "php_script"},
-#   { pattern = "/cgi-bin/", desc = "cgi_script"},
-#   { pattern = "/phpMyAdmin/", desc = "admin_discovery"},
-#   { pattern = "/webfig/", desc = "admin_discovery"},
-#   { pattern = "/wp-admin/", desc = "wp_discovery"},
-#   { pattern = "/wp-includes/", desc = "wp_discovery"},
-#   { pattern = "/wordpress", desc = "wp_discovery"},
-#   { pattern = "/boaform/", desc = "scanbot"},
-#   { pattern = "/kube-system/daemonsets/", desc = "scanbot"},
-#   { pattern = '/autodiscover/autodiscover\.json\?@zdi/Powershell', desc = "scanbot"},
-#   { pattern = "/kube-system/daemonsets/", desc = "scanbot"},
-#   { pattern = "/api/sonicos/auth", desc = "scanbot"},
-#   { pattern = "/dana-na/", desc = "scanbot"},
-#   { pattern = '/\.git/', desc = "scanbot"},
-#   { pattern = '/\.env" for', desc = "scanbot"},
-# ]
+[rules.php_probe]
+patterns = [
+  '\.php" for',
+  '\.pl" for',
+  '\.aspx" for',
+  '\.cgi" for',
+  "XDEBUG_SESSION_START=phpstorm",
+  "/cgi-bin/",
+  "/phpMyAdmin/",
+  "/webfig/",
+  "/wp-admin/",
+  "/wp-includes/",
+  "/wordpress",
+  "/boaform/",
+  "/kube-system/daemonsets/",
+  '/autodiscover/autodiscover\.json\?@zdi/Powershell',
+  "/api/sonicos/auth",
+  "/dana-na/",
+  '/\.git/',
+  '/\.env" for',
+]
+
+[[files]]
+path = "/opt/railsapp/log/production.log"
+ip_regex = 'for (\d+\.\d+\.\d+\.\d+) at'
+rules = ["php_probe"]

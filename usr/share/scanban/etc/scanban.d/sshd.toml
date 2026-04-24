@@ -1,12 +1,16 @@
-# this picks up SSH brute force attempts, you may like to give extra threshold in case you fat finger 
-# your username, let alone your password
+# SSH brute force detection. You may want a higher threshold to allow for
+# fat-fingered usernames or passwords before triggering a ban.
 
-# [[rules]]
-# patterns = [
-#   'sshd.*Invalid user \w+ from',
-#   'sshd.*User \w+ from .* not allowed because not listed in AllowUsers',
-#   'sshd.*Did not receive identification string from',
-#   'sshd.*Failed password for'
-# ]
-# ip_regex = 'from (\d+.\d+.\d+.\d+)'
-# threshold = 3
+[rules.ssh_bruteforce]
+patterns = [
+  'sshd.*Invalid user \w+ from',
+  'sshd.*User \w+ from .* not allowed because not listed in AllowUsers',
+  'sshd.*Did not receive identification string from',
+  'sshd.*Failed password for'
+]
+ip_regex = 'from (\d+.\d+.\d+.\d+)'
+threshold = 3
+
+[[files]]
+path = "/var/log/auth.log"
+rules = ["ssh_bruteforce"]

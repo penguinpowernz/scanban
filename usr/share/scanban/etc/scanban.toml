@@ -6,15 +6,10 @@
 #byo_tcp = "127.0.0.1:7733"
 #byo_uds = "/var/run/scanban.socket
 
-files = [
-  #"/var/log/auth.log",
-  #"docker://influxdb"
-]
-
 whitelist = [
   "127.0.0.1",
 
-  # if you're using docker this ensures that dockers/gateway doesn't get blocked
+  # if you're using docker this ensures that docker's gateway doesn't get blocked
   #"172.17.0.0/16",
   #"172.18.0.0/16",
   #"172.19.0.0/16",
@@ -27,3 +22,19 @@ bantime = 24 # hours
 ipsetblock = "ipset add scanban $ip"
 ipsetunblock = "ipset del scanban $ip"
 #slackalert = "/usr/bin/slackalert '$desc $ip'"
+
+# Define named rules, then attach them to files below.
+# Rules inherit global settings (bantime, ip_regex, action, etc.) for any
+# fields left unset. Per-file settings override globals; per-rule settings
+# override per-file settings.
+
+# [rules.my_rule]
+# patterns = ["pattern one", "pattern two"]
+# ip_regex = '(\d+\.\d+\.\d+\.\d+)'   # optional override
+# action = "ipsetblock"                  # optional override
+# threshold = 3                          # optional override
+# bantime = 24                           # optional override
+
+# [[files]]
+# path = "/var/log/auth.log"
+# rules = ["my_rule"]

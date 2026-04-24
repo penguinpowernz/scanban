@@ -5,7 +5,14 @@ import (
 	"time"
 )
 
+// Handler is implemented by any component that processes a scan Context.
+// Stored on Context so each scanner can carry its own rule engine.
+type Handler interface {
+	Handle(*Context)
+}
+
 type Context struct {
+	Engine Handler `toml:"-"` // per-file rule engine, set by the scanner
 	Filename       string    `json:"filename"`
 	IP             string    `json:"ip"`
 	Action         string    `json:"action"`
