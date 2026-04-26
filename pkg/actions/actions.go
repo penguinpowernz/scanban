@@ -12,8 +12,6 @@ import (
 )
 
 var (
-	doBans = true
-
 	// Global rate limiter: 60 actions/minute sustained, burst of 10
 	globalLimiter = ratelimit.New(60, 10)
 
@@ -39,14 +37,13 @@ func (a *Action) Handle(c *scan.Context) {
 		return
 	}
 
-	if !doBans {
-		return
-	}
-
 	actns := strings.Split(c.Action, ",")
 	for _, actn := range actns {
 		if actn == a.name {
-			a.execute(c)
+			if err := a.execute(c); err != nil {
+				c.Err(err.Error())
+				return
+			}
 			c.Actioned = true
 		}
 	}
@@ -77,11 +74,9 @@ func (a *Action) execute(c *scan.Context) error {
 	cmdstring := strings.ReplaceAll(a.command, "$ip", safeIP)
 	cmd := exec.Command("/bin/bash", "-c", cmdstring)
 	cmd.Env = append(cmd.Env, "SB_IP="+safeIP)
-	// cmd.Env = append(cmd.Env, "SB_DESC="+c.Desc)
 	cmd.Env = append(cmd.Env, "SB_BANTIME="+fmt.Sprintf("%d", c.BanTime))
 	cmd.Env = append(cmd.Env, "SB_FILENAME="+sanitize.EnvVar(c.Filename))
 	cmd.Env = append(cmd.Env, "SB_LINE="+sanitize.EnvVar(c.Line))
-	// cmd.Env = append(cmd.Env, "SB_NAME="+c.Name)
 	cmd.Env = append(cmd.Env, "SB_UNBANACTION="+sanitize.EnvVar(c.UnbanAction))
 
 	err := cmd.Run()
@@ -94,28 +89,35 @@ func (a *Action) execute(c *scan.Context) error {
 	return err
 }
 
-type Actions []*Action
+type Actions struct {
+	actions []*Action
+	doBans  bool
+}
 
-func BuildActions(actions map[string]string, do bool) Actions {
-	aa := new(Actions)
-	var x int
+func BuildActions(actions map[string]string, do bool) *Actions {
+	aa := &Actions{doBans: do}
 	for k, v := range actions {
-		*aa = append(*aa, &Action{
+		aa.actions = append(aa.actions, &Action{
 			name:    k,
 			command: v,
 		})
-		x++
 	}
-	doBans = do
-	return *aa
+	return aa
 }
 
-func (a Actions) Handle(c *scan.Context) {
+func (a *Actions) Handle(c *scan.Context) {
 	if !c.OK() {
 		return
 	}
 
-	for _, actn := range a {
+	if !a.doBans {
+		return
+	}
+
+	for _, actn := range a.actions {
 		actn.Handle(c)
+		if !c.OK() {
+			return
+		}
 	}
 }

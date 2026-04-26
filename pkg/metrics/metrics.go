@@ -3,6 +3,8 @@ package metrics
 import (
 	"context"
 	"os"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -183,19 +185,19 @@ func (m *Metrics) Handle(c *scan.Context) {
 		if err := c.GetError(); err != nil {
 			errMsg := err.Error()
 			switch {
-			case contains(errMsg, "whitelisted"):
+			case strings.Contains(errMsg, "whitelisted"):
 				m.Errors.Whitelisted++
-			case contains(errMsg, "invalid") && contains(errMsg, "IP"):
+			case strings.Contains(errMsg, "invalid") && strings.Contains(errMsg, "IP"):
 				m.Errors.InvalidIP++
-			case contains(errMsg, "already actioned recently"):
+			case strings.Contains(errMsg, "already actioned recently"):
 				m.Errors.RateLimitedCooldown++
 				m.RateLimiting.CooldownBlocked++
-			case contains(errMsg, "global rate limit"):
+			case strings.Contains(errMsg, "global rate limit"):
 				m.Errors.RateLimitedGlobal++
 				m.RateLimiting.GlobalBlocked++
-			case contains(errMsg, "no match"):
+			case strings.Contains(errMsg, "no match"):
 				m.Errors.NoMatch++
-			case contains(errMsg, "threshold"):
+			case strings.Contains(errMsg, "threshold"):
 				m.Errors.ThresholdNotMet++
 			default:
 				m.Errors.Other++
@@ -241,22 +243,15 @@ func (m *Metrics) WriteStateFile(path string) error {
 
 // getTopBannedIPs returns the top N most banned IPs
 func (m *Metrics) getTopBannedIPs(n int) []IPCount {
-	// Convert map to slice
-	var counts []IPCount
+	counts := make([]IPCount, 0, len(m.IPBanCounts))
 	for ip, count := range m.IPBanCounts {
 		counts = append(counts, IPCount{IP: ip, Count: count})
 	}
 
-	// Simple bubble sort (good enough for small N)
-	for i := 0; i < len(counts); i++ {
-		for j := i + 1; j < len(counts); j++ {
-			if counts[j].Count > counts[i].Count {
-				counts[i], counts[j] = counts[j], counts[i]
-			}
-		}
-	}
+	sort.Slice(counts, func(i, j int) bool {
+		return counts[i].Count > counts[j].Count
+	})
 
-	// Return top N
 	if len(counts) > n {
 		return counts[:n]
 	}
@@ -278,23 +273,6 @@ func StartWriter(ctx context.Context, path string, interval time.Duration) {
 			global.WriteStateFile(path)
 		}
 	}
-}
-
-// contains checks if a string contains a substring (case-insensitive helper)
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) &&
-		(s == substr || len(s) > len(substr) &&
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // Legacy exports for backwards compatibility

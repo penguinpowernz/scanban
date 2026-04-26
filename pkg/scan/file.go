@@ -27,11 +27,12 @@ func scanFile(filename string) func(ctx context.Context, ch chan string) {
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
-			ch <- scanner.Text()
-			// log.Println("scanned")
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- scanner.Text():
+			}
 		}
-		// log.Println("file scanner for", filename, "done")
 		close(ch)
-		// log.Println("file scanner for", filename, "exited")
 	}
 }

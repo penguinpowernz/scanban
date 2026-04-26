@@ -20,7 +20,11 @@ func FromStdin(dryRun bool, engine Handler) Scanners {
 func scanStdin(ctx context.Context, ch chan string) {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		ch <- scanner.Text()
+		select {
+		case <-ctx.Done():
+			return
+		case ch <- scanner.Text():
+		}
 	}
 	close(ch)
 }

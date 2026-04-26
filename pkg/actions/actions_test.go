@@ -17,9 +17,7 @@ func TestBuildActions(t *testing.T) {
 
 	actions := BuildActions(actionMap, true)
 
-	assert.Len(t, actions, 2, "BuildActions should create correct number of actions")
-	assert.Equal(t, "test1", actions[0].name, "First action name should match")
-	assert.Equal(t, "test2", actions[1].name, "Second action name should match")
+	assert.Len(t, actions.actions, 2, "BuildActions should create correct number of actions")
 }
 
 func TestActionHandle(t *testing.T) {
@@ -52,9 +50,12 @@ func TestActionHandle(t *testing.T) {
 
 func TestActionsHandle(t *testing.T) {
 	// Create multiple actions
-	actions := Actions{
-		&Action{name: "test1", command: "echo test1"},
-		&Action{name: "test2", command: "echo test2"},
+	actions := &Actions{
+		actions: []*Action{
+			{name: "test1", command: "echo test1"},
+			{name: "test2", command: "echo test2"},
+		},
+		doBans: true,
 	}
 
 	// Successful context with multiple actions
@@ -262,7 +263,7 @@ func TestRateLimitingGlobalLimit(t *testing.T) {
 		err := action.execute(ctx)
 		if err == nil {
 			allowed++
-		} else if err != nil {
+		} else {
 			errMsg := err.Error()
 			if len(errMsg) >= 18 && errMsg[:18] == "global rate limit " {
 				rateLimited++

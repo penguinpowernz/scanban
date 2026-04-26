@@ -1,6 +1,8 @@
 package threshold
 
 import (
+	"sync"
+
 	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
@@ -11,6 +13,7 @@ func New() *Threshold {
 }
 
 type Threshold struct {
+	mu   sync.Mutex
 	hits map[string]int
 }
 
@@ -19,12 +22,15 @@ func (t *Threshold) Handle(c *scan.Context) {
 		return
 	}
 
+	t.mu.Lock()
 	t.hits[c.IP]++
-
-	if t.hits[c.IP] < c.Threshold {
-		c.Err("threshold not met")
-		return
+	count := t.hits[c.IP]
+	if count >= c.Threshold {
+		t.hits[c.IP] = 0
 	}
+	t.mu.Unlock()
 
-	t.hits[c.IP] = 0
+	if count < c.Threshold {
+		c.Err("threshold not met")
+	}
 }

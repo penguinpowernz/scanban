@@ -2,31 +2,43 @@ package once
 
 import (
 	"crypto/md5"
+	"sync"
 
 	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
-var seenHashes = make([]string, 0, 50)
-var seen = make(map[string]bool)
+const windowSize = 50
+
+var (
+	mu     sync.Mutex
+	ring   [windowSize]string // circular buffer of hash strings
+	head   int                // next slot to write
+	count  int                // number of valid entries in ring (0..windowSize)
+	seen   = make(map[string]bool)
+)
 
 func Handle(c *scan.Context) {
-	md5sum := md5.Sum([]byte(c.Line))
-	hashString := string(md5sum[:])
+	sum := md5.Sum([]byte(c.Line))
+	hash := string(sum[:])
 
-	// Check if the hash has been seen
-	if seen[hashString] {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if seen[hash] {
 		c.Err("already seen")
 		return
 	}
 
-	// Add the new hash to the map
-	seen[hashString] = true
-
-	// Maintain only 50 hashes in memory
-	if len(seen) >= 50 {
-		delete(seen, seenHashes[0])
-		seenHashes = append(seenHashes[1:], hashString)
+	// Evict the oldest entry when the window is full
+	if count == windowSize {
+		oldest := ring[head]
+		delete(seen, oldest)
 	} else {
-		seenHashes = append(seenHashes, hashString)
+		count++
 	}
+
+	// Write the new hash into the ring at head and advance
+	ring[head] = hash
+	head = (head + 1) % windowSize
+	seen[hash] = true
 }

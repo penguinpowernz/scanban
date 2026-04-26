@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/penguinpowernz/scanban/pkg/sanitize"
 	"github.com/penguinpowernz/scanban/pkg/scan"
 )
 
@@ -29,6 +30,10 @@ func NewList(fn string, do bool) (*List, error) {
 
 	list.execute = func(entry UnbanEntry) bool {
 		cmd := entry.Cmd()
+		if cmd == nil {
+			log.Printf("skipping unban for invalid IP %q", entry.IP)
+			return true // remove the entry — it can never be executed safely
+		}
 		if err := cmd.Run(); err != nil {
 			log.Printf("failed to unban %s: %s", entry.IP, err)
 			return false
@@ -55,9 +60,13 @@ type UnbanEntry struct {
 }
 
 func (entry *UnbanEntry) Cmd() *exec.Cmd {
-	cmdstring := strings.ReplaceAll(entry.Action, "$ip", entry.IP)
+	safeIP := sanitize.IP(entry.IP)
+	if safeIP == "" {
+		return nil
+	}
+	cmdstring := strings.ReplaceAll(entry.Action, "$ip", safeIP)
 	cmd := exec.Command("/bin/bash", "-c", cmdstring)
-	cmd.Env = append(cmd.Env, "SB_IP="+entry.IP)
+	cmd.Env = append(cmd.Env, "SB_IP="+safeIP)
 	cmd.Env = append(cmd.Env, "SB_UNBANTIME="+fmt.Sprintf("%d", entry.After.Unix()))
 	cmd.Env = append(cmd.Env, "SB_NAME="+entry.Action)
 	return cmd
@@ -65,17 +74,17 @@ func (entry *UnbanEntry) Cmd() *exec.Cmd {
 
 func (list *List) unban() {
 	list.mu.Lock()
-	defer list.mu.Unlock()
-
+	now := time.Now()
 	for i := len(list.Entries) - 1; i >= 0; i-- {
 		entry := list.Entries[i]
-		if time.Now().After(entry.After) {
+		if now.After(entry.After) {
 			log.Printf("Unbanning %s with action %s", entry.IP, entry.Action)
 			if list.execute(entry) {
 				list.Entries = append(list.Entries[:i], list.Entries[i+1:]...)
 			}
 		}
 	}
+	list.mu.Unlock()
 }
 
 func (list *List) Handle(c *scan.Context) {
@@ -93,15 +102,14 @@ func (list *List) Handle(c *scan.Context) {
 
 	if !c.DryRun {
 		list.mu.Lock()
-		defer list.mu.Unlock()
-
 		list.Entries = append(list.Entries, UnbanEntry{
 			Action: c.UnbanAction,
 			IP:     c.IP,
 			After:  c.ReleaseTime(),
 		})
-
-		if err := list.save(); err != nil {
+		err := list.saveUnlocked()
+		list.mu.Unlock()
+		if err != nil {
 			log.Printf("failed to save unban list: %s", err)
 		}
 	}
@@ -110,10 +118,15 @@ func (list *List) Handle(c *scan.Context) {
 	c.UnbanAt = c.ReleaseTime()
 }
 
+// save acquires the lock and writes the list to disk.
 func (list *List) save() error {
 	list.mu.Lock()
 	defer list.mu.Unlock()
+	return list.saveUnlocked()
+}
 
+// saveUnlocked writes the list to disk. Caller must hold list.mu.
+func (list *List) saveUnlocked() error {
 	f, err := os.Create(list.fn)
 	if err != nil {
 		return err

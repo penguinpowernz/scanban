@@ -114,7 +114,7 @@ func main() {
 	wl := whitelist.New(cfg.Whitelist)
 	thresholds := threshold.New()
 	actor := actions.BuildActions(cfg.Actions, cfg.DoBans)
-	log.Println("built", len(actor), "actions")
+	log.Println("built", len(cfg.Actions), "actions")
 	logger := logit.New()
 	elogger := logit.Errors(verbose)
 
