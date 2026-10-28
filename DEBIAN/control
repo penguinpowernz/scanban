@@ -1,12 +1,12 @@
 Package: scanban
-Version: 0.0.1
+Version: 3.0.0
 Section: misc
 Priority: optional
 Architecture: amd64
 Maintainer: Robert <robert@penguinpower.co.nz>
 Essential: no
 Homepage: https://github.com/penguinpower/scanban
-Installed-Size: 3377
+Installed-Size: 13774
 Description: Scan logs and ban abusive IPs
   A tool to scan logs and ban abusive IPs, similar to fail2ban
   but easier to configure.  There is not facility for time based
