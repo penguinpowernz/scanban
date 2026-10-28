@@ -1,6 +1,6 @@
 
 build:
-	go build -o usr/bin/scanban ./cmd/scanban
+	CGO_ENABLED=0 go build -trimpath -buildvcs=false -o usr/bin/scanban ./cmd/scanban
 
 .PHONY: pkg
 pkg:

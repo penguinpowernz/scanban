@@ -1,5 +1,5 @@
 4bf2d4376d9b4682a688cbc6410b5e5a  lib/systemd/system/scanban.service
-18401af15b46bb0d64463d20cf6e8595  usr/bin/scanban
+efcd3a1571196a010487df27f5421536  usr/bin/scanban
 dbdf3dad265fd71bfa3d42e1f7fb7399  usr/share/doc/scanban/README.md
 a89e83ebab13666f451b2317a954e512  usr/share/scanban/etc/scanban.d/README
 2e8582742be661f0d70b1978b3f961ff  usr/share/scanban/etc/scanban.d/rails.toml
